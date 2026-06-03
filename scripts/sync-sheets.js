@@ -198,26 +198,25 @@ async function sincronizarFirestoreParaSheets(sheets) {
 // ─── Helpers ──────────────────────────────────────────────────
 function parseData(str) {
   if (!str) return null;
-  // Tenta dd/mm/yyyy ou yyyy-mm-dd
-  const partes = str.includes("/") ? str.split("/").reverse() : str.split("-");
-  const d = new Date(`${partes[0]}-${partes[1]?.padStart(2,"0")}-${partes[2]?.padStart(2,"0")}`);
-  return isNaN(d) ? null : admin.firestore.Timestamp.fromDate(d);
-}
-
-function fmtDataBR(ts) {
-  if (!ts) return "";
-  const d = ts.toDate ? ts.toDate() : new Date(ts);
-  return d.toLocaleDateString("pt-BR");
-}
-
-function colLetra(idx) {
-  let s = "";
-  idx++;
-  while (idx > 0) {
-    s = String.fromCharCode(64 + (idx % 26 || 26)) + s;
-    idx = Math.floor((idx - 1) / 26);
+  try {
+    // Ignora valores claramente inválidos
+    if (str.toString().trim() === "" || str.toString().trim() === "0") return null;
+    
+    // Trata número serial do Excel (ex: 44927)
+    const num = Number(str);
+    if (!isNaN(num) && num > 1000 && num < 100000) {
+      const d = new Date((num - 25569) * 86400 * 1000);
+      if (!isNaN(d.getTime())) return admin.firestore.Timestamp.fromDate(d);
+    }
+    
+    // Trata dd/mm/yyyy ou yyyy-mm-dd
+    let partes;
+    if (str.includes("/")) partes = str.split("/").reverse();
+    else partes = str.split("-");
+    const d = new Date(`${partes[0]}-${String(partes[1]).padStart(2,"0")}-${String(partes[2]).padStart(2,"0")}`);
+    if (isNaN(d.getTime())) return null;
+    return admin.firestore.Timestamp.fromDate(d);
+  } catch(e) {
+    return null;
   }
-  return s;
 }
-
-main().catch(e => { console.error("ERRO:", e); process.exit(1); });
