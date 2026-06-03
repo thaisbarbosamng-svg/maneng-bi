@@ -134,8 +134,52 @@ async function sincronizarSheetsParaFirestore(sheets) {
     }
   }
 
-  await batch.commit();
-  console.log(`  ✓ ${novos} novos, ${atualizados} atualizados no Firestore`);
+ // Escreve em lotes de 400 (limite do Firestore é 500)
+  const LOTE = 400;
+  let ops = [], novos = 0, atualizados = 0;
+
+  for (const row of dados) {
+    const get = (idx) => idx >= 0 ? (row[idx] || "").toString().trim() : "";
+    const sigla   = get(C.SIGLA);
+    const cliente = get(C.CLIENTE);
+    const mes     = get(C.MES);
+    const ano     = get(C.ANO);
+    if (!sigla && !cliente) continue;
+
+    const chave = `${sigla}|${cliente}|${mes}|${ano}`;
+    const statusRaw = get(C.STATUS).toUpperCase().trim();
+    const novosDados = {
+      sigla, cliente, mes, ano,
+      supervisao: get(C.SUPERVISAO), estado: get(C.ESTADO),
+      pcm: get(C.PCM), coordenador: get(C.COORDENADOR),
+      tipoManutencao: get(C.TIPO), status: statusRaw || "PROGRAMADA",
+      pmoc2026: get(C.PMOC), periodicidade: get(C.PERIODICIDADE),
+      dataInicio: parseData(get(C.DATA_INICIO)),
+      dataTermino: parseData(get(C.DATA_TERMINO)),
+      ultimaSync: admin.firestore.FieldValue.serverTimestamp(),
+      syncPendente: false
+    };
+
+    if (existentes[chave] && !existentes[chave].alteradoManualmente) {
+      ops.push({ type: "update", ref: db.collection("ordens_servico").doc(existentes[chave].id), data: novosDados });
+      atualizados++;
+    } else if (!existentes[chave]) {
+      ops.push({ type: "set", ref: db.collection("ordens_servico").doc(), data: { ...novosDados, criadoEm: admin.firestore.FieldValue.serverTimestamp() } });
+      novos++;
+    }
+  }
+
+  // Commit em lotes de 400
+  for (let i = 0; i < ops.length; i += LOTE) {
+    const b = db.batch();
+    ops.slice(i, i + LOTE).forEach(op => {
+      if (op.type === "update") b.update(op.ref, op.data);
+      else b.set(op.ref, op.data);
+    });
+    await b.commit();
+    console.log(`  Lote ${Math.floor(i/LOTE)+1}: ${Math.min(i+LOTE, ops.length)}/${ops.length} registros`);
+  }
+  console.log(`  ✓ ${novos} novos, ${atualizados} atualizados no Firestore`);(`  ✓ ${novos} novos, ${atualizados} atualizados no Firestore`);
 }
 
 // ─────────────────────────────────────────────────────────────
