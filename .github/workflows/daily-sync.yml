@@ -18,7 +18,7 @@ jobs:
           node-version: "20"
       - name: Instalar dependências
         working-directory: scripts
-        run: npm ci
+        run: npm install
       - name: Executar sincronização
         working-directory: scripts
         env:
