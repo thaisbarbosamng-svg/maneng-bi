@@ -1,0 +1,13 @@
+{
+  "name": "maneng-sync",
+  "version": "1.0.0",
+  "description": "Sincronização Google Sheets <-> Firebase Firestore — ManEng",
+  "main": "sync-sheets.js",
+  "scripts": {
+    "sync": "node sync-sheets.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "googleapis": "^140.0.0"
+  }
+}

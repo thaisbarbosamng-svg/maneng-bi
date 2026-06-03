@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ManEng BI — Logs</title>
+  <link rel="stylesheet" href="/maneng-bi/css/main.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="sidebar-logo"><span>man<span class="accent">eng</span></span></div>
+    <div id="sidebar"></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">Log de Alterações</div>
+      <div class="topbar-filters">
+        <button class="btn btn-outline btn-sm" onclick="exportarLogs()" style="color:#fff;border-color:rgba(255,255,255,.3)">⬇ Excel</button>
+      </div>
+    </div>
+    <div class="content">
+      <div class="filters-bar">
+        <div class="filter-group"><label>Usuário</label><select id="f-user" onchange="filtrar()"></select></div>
+        <div class="filter-group"><label>Módulo</label><select id="f-modulo" onchange="filtrar()"></select></div>
+        <div class="filter-group"><label>Data inicial</label><input type="date" id="f-dt-ini" onchange="filtrar()"></div>
+        <div class="filter-group"><label>Data final</label><input type="date" id="f-dt-fim" onchange="filtrar()"></div>
+      </div>
+      <div class="table-card">
+        <div class="table-header">
+          <h3>Histórico <span id="contador" style="color:#718096;font-weight:400;font-size:.85rem"></span></h3>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr><th>Data/Hora</th><th>Usuário</th><th>Módulo</th><th>Campo</th><th>Valor Anterior</th><th>Valor Novo</th></tr>
+            </thead>
+            <tbody id="tabela-logs"></tbody>
+          </table>
+        </div>
+        <div class="pagination" id="pagination"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <script src="/maneng-bi/js/config.js"></script>
+  <script src="/maneng-bi/js/auth.js"></script>
+  <script src="/maneng-bi/js/utils.js"></script>
+  <script>
+    let todosLogs = [], filtrados = [], pagina = 1;
+    const POR_PAG = 100;
+
+    requireAuth(async () => {
+      renderMenu("logs");
+      const snap = await db.collection("logs").orderBy("dataHora","desc").limit(2000).get();
+      todosLogs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      popularSelect("f-user",   todosLogs, "usuario", "Todos");
+      popularSelect("f-modulo", todosLogs, "modulo",  "Todos");
+      filtrar();
+    });
+
+    function filtrar() {
+      const user   = document.getElementById("f-user").value;
+      const modulo = document.getElementById("f-modulo").value;
+      const dtIni  = document.getElementById("f-dt-ini").value;
+      const dtFim  = document.getElementById("f-dt-fim").value;
+      filtrados = todosLogs.filter(l => {
+        if (user   && l.usuario !== user)   return false;
+        if (modulo && l.modulo  !== modulo) return false;
+        if (dtIni || dtFim) {
+          const dt = l.dataHora?.toDate ? l.dataHora.toDate() : new Date(l.dataHora);
+          if (dtIni && dt < new Date(dtIni)) return false;
+          if (dtFim && dt > new Date(dtFim + "T23:59:59")) return false;
+        }
+        return true;
+      });
+      pagina = 1;
+      renderTabela();
+    }
+
+    function renderTabela() {
+      const inicio = (pagina - 1) * POR_PAG;
+      const pag = filtrados.slice(inicio, inicio + POR_PAG);
+      document.getElementById("contador").textContent = `(${filtrados.length})`;
+      document.getElementById("tabela-logs").innerHTML = pag.map(l => `
+        <tr>
+          <td style="white-space:nowrap;font-size:.8rem">${fmtDateTime(l.dataHora)}</td>
+          <td>${l.usuario||"—"}</td>
+          <td><span style="background:#f0f4f8;padding:2px 8px;border-radius:12px;font-size:.75rem">${l.modulo||"—"}</span></td>
+          <td style="font-size:.8rem">${l.campo||"—"}</td>
+          <td style="font-size:.8rem;color:#718096;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${l.valorAnterior||''}">${l.valorAnterior||"—"}</td>
+          <td style="font-size:.8rem;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${l.valorNovo||''}">${l.valorNovo||"—"}</td>
+        </tr>`).join("") || `<tr><td colspan="6"><div class="empty-state"><p>Nenhum log encontrado</p></div></td></tr>`;
+
+      const tp = Math.ceil(filtrados.length / POR_PAG);
+      if (tp <= 1) { document.getElementById("pagination").innerHTML=""; return; }
+      let h="";
+      for (let i=1;i<=tp;i++) if(i===1||i===tp||Math.abs(i-pagina)<=2)
+        h += `<button class="page-btn ${i===pagina?'active':''}" onclick="irPag(${i})">${i}</button>`;
+      document.getElementById("pagination").innerHTML = h;
+    }
+    function irPag(n) { pagina = n; renderTabela(); }
+
+    function exportarLogs() {
+      const dados = filtrados.map(l => ({
+        DataHora: fmtDateTime(l.dataHora), Usuario: l.usuario,
+        Modulo: l.modulo, Campo: l.campo,
+        ValorAnterior: l.valorAnterior, ValorNovo: l.valorNovo
+      }));
+      exportarExcel(dados, "logs_alteracoes");
+    }
+  </script>
+</body>
+</html>

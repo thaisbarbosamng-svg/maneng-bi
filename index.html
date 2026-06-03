@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>ManEng BI</title>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script src="/maneng-bi/js/config.js"></script>
+  <script>
+    firebase.initializeApp(FIREBASE_CONFIG);
+    firebase.auth().onAuthStateChanged(user => {
+      window.location.href = user
+        ? "/maneng-bi/dashboard.html"
+        : "/maneng-bi/login.html";
+    });
+  </script>
+</head>
+<body style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;color:#718096">
+  Carregando...
+</body>
+</html>

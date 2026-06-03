@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ManEng BI — Login</title>
+  <link rel="stylesheet" href="/maneng-bi/css/main.css">
+</head>
+<body class="login-page">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="brand">man<span>eng</span></div>
+      <p>Sistema de Gestão de Manutenção</p>
+    </div>
+    <h2>Entrar na sua conta</h2>
+
+    <div id="form-login">
+      <div class="form-group">
+        <label>E-mail</label>
+        <input type="email" id="email" placeholder="seu@email.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label>Senha</label>
+        <input type="password" id="senha" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <div id="erro-login" style="color:#C00000;font-size:.85rem;margin-bottom:12px;display:none"></div>
+      <button class="btn btn-accent" style="width:100%;justify-content:center;padding:11px" onclick="fazerLogin()">
+        Entrar
+      </button>
+      <div style="text-align:center;margin-top:14px">
+        <a href="#" onclick="mostrarCadastro()" style="color:var(--accent);font-size:.85rem;text-decoration:none">
+          Primeiro acesso? Criar conta
+        </a>
+      </div>
+    </div>
+
+    <div id="form-cadastro" style="display:none">
+      <div class="form-group">
+        <label>Nome completo</label>
+        <input type="text" id="cad-nome" placeholder="Seu nome">
+      </div>
+      <div class="form-group">
+        <label>E-mail</label>
+        <input type="email" id="cad-email" placeholder="seu@email.com">
+      </div>
+      <div class="form-group">
+        <label>Senha (mínimo 6 caracteres)</label>
+        <input type="password" id="cad-senha" placeholder="••••••••">
+      </div>
+      <div id="erro-cad" style="color:#C00000;font-size:.85rem;margin-bottom:12px;display:none"></div>
+      <button class="btn btn-accent" style="width:100%;justify-content:center;padding:11px" onclick="fazerCadastro()">
+        Criar conta
+      </button>
+      <div style="text-align:center;margin-top:14px">
+        <a href="#" onclick="mostrarLogin()" style="color:var(--accent);font-size:.85rem;text-decoration:none">
+          Voltar ao login
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+  <script src="/maneng-bi/js/config.js"></script>
+  <script>
+    firebase.initializeApp(FIREBASE_CONFIG);
+    const auth = firebase.auth();
+    const db   = firebase.firestore();
+
+    // Se já logado, redireciona
+    auth.onAuthStateChanged(async user => {
+      if (!user) return;
+      const snap = await db.collection("usuarios").doc(user.uid).get();
+      if (snap.exists && snap.data().status === "ativo") {
+        window.location.href = "/maneng-bi/dashboard.html";
+      }
+    });
+
+    async function fazerLogin() {
+      const email = document.getElementById("email").value.trim();
+      const senha = document.getElementById("senha").value;
+      const erroEl = document.getElementById("erro-login");
+      erroEl.style.display = "none";
+      try {
+        await auth.signInWithEmailAndPassword(email, senha);
+      } catch(e) {
+        erroEl.textContent = traduzirErro(e.code);
+        erroEl.style.display = "block";
+      }
+    }
+
+    async function fazerCadastro() {
+      const nome  = document.getElementById("cad-nome").value.trim();
+      const email = document.getElementById("cad-email").value.trim();
+      const senha = document.getElementById("cad-senha").value;
+      const erroEl = document.getElementById("erro-cad");
+      erroEl.style.display = "none";
+      if (!nome) { erroEl.textContent = "Informe seu nome."; erroEl.style.display="block"; return; }
+      try {
+        const cred = await auth.createUserWithEmailAndPassword(email, senha);
+        await db.collection("usuarios").doc(cred.user.uid).set({
+          nome, email,
+          perfil: "operador",
+          status: "pendente",
+          criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        await auth.signOut();
+        alert("Conta criada! Aguarde a aprovação do administrador para acessar o sistema.");
+        mostrarLogin();
+      } catch(e) {
+        erroEl.textContent = traduzirErro(e.code);
+        erroEl.style.display = "block";
+      }
+    }
+
+    function traduzirErro(code) {
+      const erros = {
+        "auth/user-not-found": "E-mail não cadastrado.",
+        "auth/wrong-password": "Senha incorreta.",
+        "auth/invalid-email": "E-mail inválido.",
+        "auth/email-already-in-use": "E-mail já cadastrado.",
+        "auth/weak-password": "Senha muito fraca (mínimo 6 caracteres).",
+        "auth/too-many-requests": "Muitas tentativas. Tente novamente em alguns minutos.",
+        "auth/invalid-credential": "E-mail ou senha incorretos."
+      };
+      return erros[code] || "Erro ao entrar. Tente novamente.";
+    }
+
+    function mostrarCadastro() {
+      document.getElementById("form-login").style.display = "none";
+      document.getElementById("form-cadastro").style.display = "block";
+    }
+    function mostrarLogin() {
+      document.getElementById("form-cadastro").style.display = "none";
+      document.getElementById("form-login").style.display = "block";
+    }
+
+    // Enter para logar
+    document.addEventListener("keydown", e => {
+      if (e.key === "Enter") {
+        if (document.getElementById("form-login").style.display !== "none") fazerLogin();
+        else fazerCadastro();
+      }
+    });
+  </script>
+</body>
+</html>

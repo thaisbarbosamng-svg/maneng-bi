@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ManEng BI — Auditoria</title>
+  <link rel="stylesheet" href="/maneng-bi/css/main.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="sidebar-logo"><span>man<span class="accent">eng</span></span></div>
+    <div id="sidebar"></div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">Auditoria e Faturamento</div>
+      <div class="topbar-filters">
+        <button class="btn btn-outline btn-sm" onclick="exportar()" style="color:#fff;border-color:rgba(255,255,255,.3)">⬇ Excel</button>
+      </div>
+    </div>
+
+    <div class="content">
+      <!-- Tabs -->
+      <div style="display:flex;gap:0;margin-bottom:16px">
+        <button class="btn" id="tab-validadas" onclick="mudarTab('validadas')"
+          style="border-radius:8px 0 0 8px;background:var(--primary);color:#fff">Aguardando Auditoria</button>
+        <button class="btn btn-outline" id="tab-auditadas" onclick="mudarTab('auditadas')"
+          style="border-radius:0;border-left:none;border-right:none">Auditadas</button>
+        <button class="btn btn-outline" id="tab-faturadas" onclick="mudarTab('faturadas')"
+          style="border-radius:0 8px 8px 0">Faturadas</button>
+      </div>
+
+      <div class="filters-bar" style="margin-bottom:16px">
+        <div class="filter-group"><label>Supervisor</label><select id="f-sup" onchange="filtrar()"></select></div>
+        <div class="filter-group"><label>Mês</label><select id="f-mes" onchange="filtrar()"></select></div>
+        <div class="filter-group"><label>Bandeira</label><select id="f-sigla" onchange="filtrar()"></select></div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-header">
+          <h3 id="tabela-titulo">OS Aguardando Auditoria</h3>
+          <span id="contador" style="color:#718096;font-size:.85rem"></span>
+        </div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr><th>Bandeira</th><th>Unidade</th><th>Supervisor</th><th>Mês/Ano</th><th>Status Atual</th><th>Ações</th></tr>
+            </thead>
+            <tbody id="tabela-auditoria"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal confirmação -->
+  <div id="modal-aud" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-aud-titulo">Confirmar Auditoria</h3>
+        <button class="modal-close" onclick="fecharModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom:10px">OS: <strong id="aud-os-nome"></strong></p>
+        <p style="margin-bottom:14px">Status atual: <span id="aud-status-atual"></span></p>
+        <div class="form-group">
+          <label>Mover para</label>
+          <select id="aud-novo-status">
+            <option value="AUDITADA">AUDITADA</option>
+            <option value="FATURADA">FATURADA</option>
+            <option value="REPROVADO">REPROVADO</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Observação</label>
+          <textarea id="aud-obs" rows="3" placeholder="Detalhe o resultado da auditoria..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="fecharModal()">Cancelar</button>
+        <button class="btn btn-accent" onclick="confirmar()">Confirmar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <script src="/maneng-bi/js/config.js"></script>
+  <script src="/maneng-bi/js/auth.js"></script>
+  <script src="/maneng-bi/js/utils.js"></script>
+  <script>
+    let todosOS = [], filtrados = [], tabAtual = "validadas", osEditando = null;
+
+    requireAuth(async (userData) => {
+      if (!["auditor","admin"].includes(userData.perfil)) {
+        alert("Acesso restrito a Auditores e Administradores.");
+        window.location.href = "/maneng-bi/dashboard.html";
+        return;
+      }
+      renderMenu("auditoria");
+      await carregar();
+    });
+
+    async function carregar() {
+      const snap = await db.collection("ordens_servico")
+        .where("status", "in", ["VALIDADA","AUDITADA","FATURADA","REPROVADO"]).get();
+      todosOS = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      popularSelect("f-sup",   todosOS, "supervisao", "Todos");
+      popularSelect("f-mes",   todosOS, "mes",        "Todos");
+      popularSelect("f-sigla", todosOS, "sigla",      "Todas");
+      filtrar();
+    }
+
+    function mudarTab(tab) {
+      tabAtual = tab;
+      const titulos = { validadas: "OS Aguardando Auditoria", auditadas: "OS Auditadas", faturadas: "OS Faturadas" };
+      document.getElementById("tabela-titulo").textContent = titulos[tab];
+      ["validadas","auditadas","faturadas"].forEach(t => {
+        const btn = document.getElementById(`tab-${t}`);
+        btn.style.background = t === tab ? "var(--primary)" : "";
+        btn.style.color = t === tab ? "#fff" : "";
+        btn.className = t === tab ? "btn" : "btn btn-outline";
+      });
+      filtrar();
+    }
+
+    function filtrar() {
+      const sup   = document.getElementById("f-sup").value;
+      const mes   = document.getElementById("f-mes").value;
+      const sigla = document.getElementById("f-sigla").value;
+      const statusMap = { validadas: ["VALIDADA"], auditadas: ["AUDITADA"], faturadas: ["FATURADA"] };
+      const statusAlvo = statusMap[tabAtual] || [];
+      filtrados = todosOS.filter(o => {
+        if (!statusAlvo.includes(o.status)) return false;
+        if (sup   && o.supervisao !== sup)   return false;
+        if (mes   && o.mes        !== mes)   return false;
+        if (sigla && o.sigla      !== sigla) return false;
+        return true;
+      });
+      renderTabela();
+    }
+
+    function renderTabela() {
+      document.getElementById("contador").textContent = `${filtrados.length} registros`;
+      const tbody = document.getElementById("tabela-auditoria");
+      tbody.innerHTML = filtrados.length ? filtrados.map(os => `
+        <tr>
+          <td><strong>${os.sigla||"—"}</strong></td>
+          <td>${os.cliente||"—"}</td>
+          <td>${os.supervisao||"—"}</td>
+          <td>${os.mes||"—"} / ${os.ano||"—"}</td>
+          <td>${statusChip(os.status)}</td>
+          <td>
+            ${tabAtual === "validadas" ? `
+              <button class="btn btn-success btn-xs" onclick="abrirModal('${os.id}','AUDITADA')">✔ Auditar</button>
+              <button class="btn btn-danger btn-xs" onclick="abrirModal('${os.id}','REPROVADO')">✗ Reprovar</button>
+            ` : tabAtual === "auditadas" ? `
+              <button class="btn btn-accent btn-xs" onclick="abrirModal('${os.id}','FATURADA')">💰 Faturar</button>
+            ` : `<span style="color:#718096;font-size:.8rem">Concluído</span>`}
+          </td>
+        </tr>`).join("")
+        : `<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">🔍</div><p>Nenhuma OS nesta etapa</p></div></td></tr>`;
+    }
+
+    function abrirModal(osId, novoStatus) {
+      osEditando = todosOS.find(o => o.id === osId);
+      if (!osEditando) return;
+      document.getElementById("aud-os-nome").textContent = `${osEditando.sigla} — ${osEditando.cliente}`;
+      document.getElementById("aud-status-atual").innerHTML = statusChip(osEditando.status);
+      document.getElementById("aud-novo-status").value = novoStatus;
+      document.getElementById("aud-obs").value = "";
+      document.getElementById("modal-aud-titulo").textContent =
+        novoStatus === "AUDITADA" ? "Confirmar Auditoria" :
+        novoStatus === "FATURADA" ? "Confirmar Faturamento" : "Reprovar OS";
+      document.getElementById("modal-aud").style.display = "flex";
+    }
+
+    function fecharModal() {
+      document.getElementById("modal-aud").style.display = "none";
+      osEditando = null;
+    }
+
+    async function confirmar() {
+      if (!osEditando) return;
+      const novoStatus = document.getElementById("aud-novo-status").value;
+      const obs = document.getElementById("aud-obs").value.trim();
+      const anterior = osEditando.status;
+      await db.collection("ordens_servico").doc(osEditando.id).update({
+        status: novoStatus,
+        statusAnterior: anterior,
+        observacaoAuditoria: obs,
+        auditadoPor: currentUserData.nome,
+        auditadoEm: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      await registrarLog("auditoria", osEditando.id, "status", anterior, novoStatus);
+      toast(`OS movida para ${novoStatus}`);
+      fecharModal();
+      await carregar();
+    }
+
+    function exportar() {
+      const dados = filtrados.map(os => ({
+        Bandeira: os.sigla, Unidade: os.cliente, Supervisor: os.supervisao,
+        Mês: os.mes, Ano: os.ano, Status: os.status,
+        AuditadoPor: os.auditadoPor || "", ObservacaoAuditoria: os.observacaoAuditoria || ""
+      }));
+      exportarExcel(dados, `auditoria_${tabAtual}`);
+    }
+  </script>
+</body>
+</html>
