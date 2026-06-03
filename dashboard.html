@@ -7,15 +7,11 @@
   <link rel="stylesheet" href="/maneng-bi/css/main.css">
 </head>
 <body>
-  <!-- SIDEBAR -->
   <aside class="sidebar">
-    <div class="sidebar-logo">
-      <span>man<span class="accent">eng</span></span>
-    </div>
+    <div class="sidebar-logo"><span>man<span class="accent">eng</span></span></div>
     <div id="sidebar"></div>
   </aside>
 
-  <!-- MAIN -->
   <div class="main">
     <div class="topbar">
       <div class="topbar-title">Dashboard Manutenção</div>
@@ -32,10 +28,8 @@
       <div id="loading" class="loading"><div class="spinner"></div> Carregando dados...</div>
       <div id="dashboard-content" style="display:none">
 
-        <!-- KPIs -->
         <div class="kpi-grid" id="kpi-grid"></div>
 
-        <!-- CHARTS ROW 1 -->
         <div class="charts-grid">
           <div class="chart-card">
             <h3>Taxa de Conclusão</h3>
@@ -48,7 +42,6 @@
           </div>
         </div>
 
-        <!-- CHARTS ROW 2 -->
         <div class="charts-grid">
           <div class="chart-card">
             <h3>Distribuição por Status</h3>
@@ -56,264 +49,13 @@
           </div>
           <div class="chart-card">
             <h3>Conclusão por Supervisor</h3>
-            <div style="overflow-y:auto;max-height:280px">
+            <div style="overflow-y:auto;max-height:300px">
               <canvas id="chart-supervisor"></canvas>
             </div>
           </div>
         </div>
 
-        <!-- TABELA RESUMO -->
-        <div class="table-card" style="margin-top:0">
+        <div class="table-card">
           <div class="table-header">
             <h3>Resumo por Supervisor</h3>
-            <button class="btn btn-outline btn-sm" onclick="exportarResumo()">⬇ Excel</button>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Supervisor</th>
-                <th>Programadas</th>
-                <th>Concluídas</th>
-                <th>Em Execução</th>
-                <th>Em Atraso</th>
-                <th>Sem Equipe</th>
-                <th>Taxa %</th>
-              </tr>
-            </thead>
-            <tbody id="tabela-supervisores"></tbody>
-          </table>
-        </div>
-
-      </div><!-- fim dashboard-content -->
-    </div><!-- fim content -->
-  </div><!-- fim main -->
-
-  <!-- Firebase SDKs -->
-  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <!-- SheetJS -->
-  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-
-  <script src="/maneng-bi/js/config.js"></script>
-  <script src="/maneng-bi/js/auth.js"></script>
-  <script src="/maneng-bi/js/utils.js"></script>
-  <script>
-    let todosOS = [], chartGauge, chartCrono, chartPizza, chartSup;
-
-    requireAuth(async (userData) => {
-      renderMenu("dashboard");
-      await carregarDados();
-    });
-
-    async function carregarDados() {
-      try {
-        const snap = await db.collection("ordens_servico").get();
-        todosOS = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-        // Popular filtros
-        popularSelect("f-supervisor",  todosOS, "supervisao",  "Todos supervisores");
-        popularSelect("f-coordenador", todosOS, "coordenador", "Todos coordenadores");
-        popularSelect("f-estado",      todosOS, "estado",      "Todos os estados");
-
-        // Meses e anos
-        const meses = [...new Set(todosOS.map(o => o.mes).filter(Boolean))];
-        const anos  = [...new Set(todosOS.map(o => String(o.ano)).filter(Boolean))].sort().reverse();
-        document.getElementById("f-mes").innerHTML =
-          `<option value="">Todos os meses</option>` + meses.map(m => `<option>${m}</option>`).join("");
-        document.getElementById("f-ano").innerHTML =
-          `<option value="">Todos os anos</option>` + anos.map(a => `<option>${a}</option>`).join("");
-
-        // Listeners dos filtros
-        ["f-supervisor","f-coordenador","f-mes","f-ano","f-estado"].forEach(id =>
-          document.getElementById(id).addEventListener("change", atualizarDashboard)
-        );
-
-        document.getElementById("loading").style.display = "none";
-        document.getElementById("dashboard-content").style.display = "block";
-        atualizarDashboard();
-      } catch(e) {
-        document.getElementById("loading").innerHTML =
-          `<span style="color:#C00000">Erro ao carregar dados: ${e.message}</span>`;
-      }
-    }
-
-    function getFiltros() {
-      return {
-        supervisor:  document.getElementById("f-supervisor").value,
-        coordenador: document.getElementById("f-coordenador").value,
-        mes:         document.getElementById("f-mes").value,
-        ano:         document.getElementById("f-ano").value,
-        estado:      document.getElementById("f-estado").value
-      };
-    }
-
-    function atualizarDashboard() {
-      const filtros = getFiltros();
-      const lista = filtrarOS(todosOS, filtros);
-      const ind = calcularIndicadores(lista);
-      renderKPIs(ind, lista);
-      renderCharts(ind, lista);
-      renderTabelaSupervisores(lista);
-    }
-
-    function renderKPIs(ind, lista) {
-      const programadas = lista.filter(o => o.status === "PROGRAMADA").length;
-      document.getElementById("kpi-grid").innerHTML = `
-        <div class="kpi-card">
-          <div class="kpi-icon">📋</div>
-          <div class="kpi-info"><div class="kpi-label">OS Programadas</div><div class="kpi-value">${programadas}</div></div>
-        </div>
-        <div class="kpi-card success-card">
-          <div class="kpi-icon">✅</div>
-          <div class="kpi-info"><div class="kpi-label">OS Concluídas</div><div class="kpi-value">${ind.concluidas}</div></div>
-        </div>
-        <div class="kpi-card warning-card">
-          <div class="kpi-icon">🔧</div>
-          <div class="kpi-info"><div class="kpi-label">Em Andamento</div><div class="kpi-value">${ind.emExecucao}</div></div>
-        </div>
-        <div class="kpi-card danger-card">
-          <div class="kpi-icon">⏰</div>
-          <div class="kpi-info"><div class="kpi-label">Em Atraso</div><div class="kpi-value">${ind.emAtraso}</div></div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-icon">👥</div>
-          <div class="kpi-info"><div class="kpi-label">Sem Equipe</div><div class="kpi-value">${ind.semEquipe}</div></div>
-        </div>
-        <div class="kpi-card accent-card">
-          <div class="kpi-icon">🚨</div>
-          <div class="kpi-info"><div class="kpi-label">Total</div><div class="kpi-value large">${ind.total}</div></div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-icon">🎯</div>
-          <div class="kpi-info"><div class="kpi-label">Meta Estimada (dia)</div><div class="kpi-value">100,00%</div></div>
-        </div>
-        <div class="kpi-card success-card">
-          <div class="kpi-icon">📈</div>
-          <div class="kpi-info"><div class="kpi-label">Taxa de Conclusão</div><div class="kpi-value">${Number(ind.taxaConclusao).toLocaleString("pt-BR",{minimumFractionDigits:2})}%</div></div>
-        </div>
-      `;
-    }
-
-    function renderCharts(ind, lista) {
-      // Gauge de taxa de conclusão
-      if (chartGauge) chartGauge.destroy();
-      const ctxG = document.getElementById("chart-gauge").getContext("2d");
-      const taxa = parseFloat(ind.taxaConclusao);
-      chartGauge = new Chart(ctxG, {
-        type: "doughnut",
-        data: {
-          datasets: [{
-            data: [taxa, 100 - taxa],
-            backgroundColor: ["#00B050","#e2e8f0"],
-            borderWidth: 0,
-            circumference: 180, rotation: 270
-          }]
-        },
-        options: {
-          cutout: "70%", responsive: true,
-          plugins: { legend: { display: false }, tooltip: { enabled: false } }
-        }
-      });
-      document.getElementById("gauge-val").textContent = taxa.toLocaleString("pt-BR",{minimumFractionDigits:2}) + "%";
-
-      // Cronograma cumprido vs alterado
-      if (chartCrono) chartCrono.destroy();
-      const ctxC = document.getElementById("chart-cronograma").getContext("2d");
-      chartCrono = new Chart(ctxC, {
-        type: "doughnut",
-        data: {
-          labels: ["Cumprido","Alterado"],
-          datasets: [{
-            data: [ind.pctCumprido, ind.pctAlterado],
-            backgroundColor: ["#1a2a4a","#4DA6FF"],
-            borderWidth: 0
-          }]
-        },
-        options: {
-          responsive: true,
-          plugins: {
-            legend: { position: "bottom" },
-            tooltip: { callbacks: { label: ctx => `${ctx.label}: ${ctx.raw}%` } }
-          }
-        }
-      });
-
-      // Pizza por status
-      const statusCount = {};
-      lista.forEach(o => { statusCount[o.status] = (statusCount[o.status]||0)+1; });
-      const statusLabels = Object.keys(statusCount);
-      const statusVals   = statusLabels.map(s => statusCount[s]);
-      const statusCores  = statusLabels.map(s => (STATUS_CONFIG[s]||{cor:"#999"}).cor);
-
-      if (chartPizza) chartPizza.destroy();
-      const ctxP = document.getElementById("chart-pizza").getContext("2d");
-      chartPizza = new Chart(ctxP, {
-        type: "pie",
-        data: { labels: statusLabels, datasets: [{ data: statusVals, backgroundColor: statusCores, borderWidth: 1 }] },
-        options: { responsive: true, plugins: { legend: { position: "right", labels: { boxWidth: 12, font: { size: 11 } } } } }
-      });
-
-      // Barras por supervisor
-      const porSup = porSupervisor(lista);
-      if (chartSup) chartSup.destroy();
-      const ctxS = document.getElementById("chart-supervisor").getContext("2d");
-      document.getElementById("chart-supervisor").height = Math.max(200, porSup.length * 28);
-      chartSup = new Chart(ctxS, {
-        type: "bar",
-        data: {
-          labels: porSup.map(s => s.supervisao),
-          datasets: [
-            { label: "Programadas", data: porSup.map(s => s.programadas), backgroundColor: "#4DA6FF" },
-            { label: "Concluídas",  data: porSup.map(s => s.concluidas),  backgroundColor: "#00B050" },
-            { label: "Em Execução", data: porSup.map(s => s.emExecucao),  backgroundColor: "#FF9900" },
-            { label: "Em Atraso",   data: porSup.map(s => s.emAtraso),    backgroundColor: "#C00000" },
-            { label: "Sem Equipe",  data: porSup.map(s => s.semEquipe),   backgroundColor: "#843C0C" }
-          ]
-        },
-        options: {
-          indexAxis: "y",
-          responsive: true,
-          plugins: { legend: { position: "top", labels: { boxWidth: 12, font: { size: 10 } } } },
-          scales: { x: { stacked: false }, y: { ticks: { font: { size: 10 } } } }
-        }
-      });
-    }
-
-    function renderTabelaSupervisores(lista) {
-      const porSup = porSupervisor(lista);
-      const tbody = document.getElementById("tabela-supervisores");
-      if (!porSup.length) {
-        tbody.innerHTML = `<tr><td colspan="7" class="empty-state"><p>Nenhum dado encontrado</p></td></tr>`;
-        return;
-      }
-      tbody.innerHTML = porSup.map(s => {
-        const total = s.programadas + s.concluidas + s.emExecucao + s.emAtraso + s.semEquipe;
-        const taxa = total > 0 ? ((s.concluidas / total) * 100).toFixed(1) : 0;
-        return `<tr>
-          <td><strong>${s.supervisao}</strong></td>
-          <td><span style="color:#4DA6FF;font-weight:600">${s.programadas}</span></td>
-          <td><span style="color:#00B050;font-weight:600">${s.concluidas}</span></td>
-          <td><span style="color:#FF9900;font-weight:600">${s.emExecucao}</span></td>
-          <td><span style="color:#C00000;font-weight:600">${s.emAtraso}</span></td>
-          <td><span style="color:#843C0C;font-weight:600">${s.semEquipe}</span></td>
-          <td><strong>${taxa}%</strong></td>
-        </tr>`;
-      }).join("");
-    }
-
-    let resumoParaExportar = [];
-    function exportarResumo() {
-      const lista = filtrarOS(todosOS, getFiltros());
-      const dados = porSupervisor(lista).map(s => ({
-        Supervisor: s.supervisao,
-        Programadas: s.programadas, Concluídas: s.concluidas,
-        EmExecução: s.emExecucao, EmAtraso: s.emAtraso, SemEquipe: s.semEquipe
-      }));
-      exportarExcel(dados, "resumo_supervisores");
-    }
-  </script>
-</body>
-</html>
+            <button class="btn btn-outline btn-sm" onclick="exportarResumo()">⬇
