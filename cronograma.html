@@ -8,23 +8,22 @@
   <style>
     .crono-wrap { overflow-x: auto; }
     .crono-table { border-collapse: collapse; min-width: 900px; width: 100%; font-size: .78rem; }
-    .crono-table th { background: var(--primary); color: rgba(255,255,255,.85); padding: 7px 6px; text-align: center; font-size: .7rem; white-space: nowrap; position: sticky; top: 0; z-index: 10; }
+    .crono-table th { background: var(--primary); color: rgba(255,255,255,.85); padding: 7px 6px; text-align: center; font-size: .7rem; white-space: nowrap; }
     .crono-table th.col-cliente { text-align: left; min-width: 200px; }
     .crono-table td { padding: 3px 4px; border: 1px solid #e2e8f0; vertical-align: middle; }
     .crono-table tr:hover { background: #f7fafc; }
     .crono-table td.col-cliente { font-size: .8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 200px; padding: 4px 8px; }
     .crono-table td.col-sigla { font-weight: 700; font-size: .75rem; color: #4a5568; text-align: center; }
-    .dia-slot {
-      width: 28px; height: 26px; border-radius: 4px; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      font-size: .68rem; font-weight: 600; margin: 1px; transition: opacity .15s;
-    }
+    .dia-slot { width: 28px; height: 26px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: .68rem; font-weight: 600; margin: 1px; transition: opacity .15s; }
     .dia-slot:hover { opacity: .8; }
-    .dia-slot.vazio { background: transparent; cursor: default; }
+    .dia-slot.vazio { background: transparent !important; cursor: default; }
     .dia-slot.hoje { outline: 2px solid #FF6B35; }
-    .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-    .legend-item { display: flex; align-items: center; gap: 5px; font-size: .75rem; }
-    .legend-dot { width: 14px; height: 14px; border-radius: 3px; }
+    .status-barra { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: .72rem; font-weight: 600; white-space: nowrap; }
+    .legend { display: flex; flex-wrap: wrap; gap: 8px; }
+    .legend-item { display: flex; align-items: center; gap: 5px; font-size: .72rem; }
+    .legend-dot { width: 12px; height: 12px; border-radius: 3px; flex-shrink: 0; }
+    .gerar-btn { background: var(--accent); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: .85rem; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+    .gerar-btn:hover { background: var(--accent-lt); }
   </style>
 </head>
 <body>
@@ -37,19 +36,16 @@
     <div class="topbar">
       <div class="topbar-title">Cronograma de Manutenção</div>
       <div class="topbar-filters">
-        <select id="f-vis">
-          <option value="mensal">Mensal</option>
-          <option value="anual">Anual</option>
-        </select>
+        <select id="f-vis"><option value="mensal">Mensal</option><option value="anual">Anual</option></select>
         <select id="f-mes-crono"></select>
         <select id="f-ano-crono"></select>
         <select id="f-sup-crono"><option value="">Todos supervisores</option></select>
+        <button class="gerar-btn" onclick="abrirGerarCronograma()">⚡ Gerar Cronograma</button>
         <button class="btn btn-outline btn-sm" onclick="exportarCrono()" style="color:#fff;border-color:rgba(255,255,255,.3)">⬇ Excel</button>
       </div>
     </div>
 
     <div class="content">
-      <!-- Legenda -->
       <div class="chart-card" style="margin-bottom:16px;padding:12px 18px">
         <div class="legend" id="legend"></div>
       </div>
@@ -57,7 +53,7 @@
       <div class="table-card">
         <div class="table-header">
           <h3 id="titulo-crono">Cronograma</h3>
-          <div style="font-size:.8rem;color:#718096">Clique em uma célula para editar o status</div>
+          <span style="font-size:.8rem;color:#718096">Clique em uma célula para editar</span>
         </div>
         <div id="loading-crono" class="loading"><div class="spinner"></div> Carregando...</div>
         <div class="crono-wrap" id="crono-wrap" style="display:none">
@@ -67,7 +63,7 @@
     </div>
   </div>
 
-  <!-- Modal edição de data -->
+  <!-- Modal edição -->
   <div id="modal-crono" class="modal-overlay" style="display:none">
     <div class="modal">
       <div class="modal-header">
@@ -77,23 +73,69 @@
       <div class="modal-body">
         <p style="margin-bottom:12px"><strong id="crono-os-nome"></strong></p>
         <div class="form-row">
-          <div class="form-group">
-            <label>Data de Início</label>
-            <input type="date" id="crono-data-inicio">
-          </div>
-          <div class="form-group">
-            <label>Data de Término</label>
-            <input type="date" id="crono-data-termino">
-          </div>
+          <div class="form-group"><label>Data de Início</label><input type="date" id="crono-data-inicio"></div>
+          <div class="form-group"><label>Data de Término</label><input type="date" id="crono-data-termino"></div>
         </div>
         <div class="form-group">
           <label>Status</label>
           <select id="crono-status-sel"></select>
         </div>
+        <div class="form-group">
+          <label>Periodicidade</label>
+          <select id="crono-period-sel">
+            <option value="">Selecione...</option>
+            <option>MENSAL</option><option>BIMESTRAL</option>
+            <option>TRIMESTRAL</option><option>SEMESTRAL</option><option>ANUAL</option>
+          </select>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="fecharModalCrono()">Cancelar</button>
         <button class="btn btn-accent" onclick="salvarCrono()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal gerar cronograma -->
+  <div id="modal-gerar" class="modal-overlay" style="display:none">
+    <div class="modal" style="max-width:480px">
+      <div class="modal-header">
+        <h3>⚡ Gerar Cronograma</h3>
+        <button class="modal-close" onclick="fecharModalGerar()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom:16px;color:#718096;font-size:.875rem">
+          Gera novas OS baseadas na última manutenção concluída de cada unidade + periodicidade cadastrada.
+        </p>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Mês de referência *</label>
+            <select id="g-mes">
+              <option value="JANEIRO">JANEIRO</option><option value="FEVEREIRO">FEVEREIRO</option>
+              <option value="MARÇO">MARÇO</option><option value="ABRIL">ABRIL</option>
+              <option value="MAIO">MAIO</option><option value="JUNHO">JUNHO</option>
+              <option value="JULHO">JULHO</option><option value="AGOSTO">AGOSTO</option>
+              <option value="SETEMBRO">SETEMBRO</option><option value="OUTUBRO">OUTUBRO</option>
+              <option value="NOVEMBRO">NOVEMBRO</option><option value="DEZEMBRO">DEZEMBRO</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Ano *</label>
+            <input type="number" id="g-ano" value="2026" min="2024" max="2030">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Supervisor (opcional)</label>
+          <select id="g-sup"><option value="">Todos</option></select>
+        </div>
+        <div id="g-preview" style="background:#f7fafc;border-radius:8px;padding:12px;margin-top:8px;font-size:.85rem;display:none">
+          <strong id="g-preview-txt"></strong>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="fecharModalGerar()">Cancelar</button>
+        <button class="btn btn-outline" onclick="previewGerar()">👁 Preview</button>
+        <button class="btn btn-accent" onclick="confirmarGerar()">⚡ Gerar</button>
       </div>
     </div>
   </div>
@@ -106,26 +148,24 @@
   <script src="/maneng-bi/js/auth.js"></script>
   <script src="/maneng-bi/js/utils.js"></script>
   <script>
-    let todosOS = [];
-    let osEditando = null;
+    let todosOS = [], osEditando = null, gerarPreview = [];
+    const MESES_IDX = {"JANEIRO":0,"FEVEREIRO":1,"MARÇO":2,"ABRIL":3,"MAIO":4,"JUNHO":5,"JULHO":6,"AGOSTO":7,"SETEMBRO":8,"OUTUBRO":9,"NOVEMBRO":10,"DEZEMBRO":11};
 
     requireAuth(async () => {
       renderMenu("cronograma");
       popularMesAno();
       await carregarOS();
-      document.getElementById("f-vis").addEventListener("change", renderCronograma);
-      document.getElementById("f-mes-crono").addEventListener("change", renderCronograma);
-      document.getElementById("f-ano-crono").addEventListener("change", renderCronograma);
-      document.getElementById("f-sup-crono").addEventListener("change", renderCronograma);
+      ["f-vis","f-mes-crono","f-ano-crono","f-sup-crono"].forEach(id =>
+        document.getElementById(id).addEventListener("change", renderCronograma));
     });
 
     function popularMesAno() {
       const anoAtual = new Date().getFullYear();
-      const mesAtual = new Date().getMonth(); // 0-indexed
+      const mesAtual = new Date().getMonth();
       document.getElementById("f-mes-crono").innerHTML =
-        MESES.map((m, i) => `<option value="${i+1}" ${i===mesAtual?'selected':''}>${m}</option>`).join("");
+        MESES.map((m,i) => `<option value="${m}" ${i===mesAtual?'selected':''}>${m}</option>`).join("");
       let anosOpt = "";
-      for (let a = anoAtual - 1; a <= anoAtual + 1; a++)
+      for (let a = anoAtual-1; a <= anoAtual+2; a++)
         anosOpt += `<option value="${a}" ${a===anoAtual?'selected':''}>${a}</option>`;
       document.getElementById("f-ano-crono").innerHTML = anosOpt;
     }
@@ -134,78 +174,98 @@
       const snap = await db.collection("ordens_servico").get();
       todosOS = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       popularSelect("f-sup-crono", todosOS, "supervisao", "Todos supervisores");
+      popularSelect("g-sup", todosOS, "supervisao", "Todos");
       renderLegenda();
       renderCronograma();
     }
 
     function renderLegenda() {
-      const statusUsados = [...new Set(todosOS.map(o => o.status).filter(Boolean))];
-      document.getElementById("legend").innerHTML = statusUsados.map(s => {
+      const usados = [...new Set(todosOS.map(o => normalizarStatus(o.status)).filter(Boolean))];
+      document.getElementById("legend").innerHTML = usados.map(s => {
         const cfg = STATUS_CONFIG[s] || { cor: "#999" };
         return `<div class="legend-item"><div class="legend-dot" style="background:${cfg.cor}"></div>${s}</div>`;
       }).join("");
     }
 
     function renderCronograma() {
-      const vis  = document.getElementById("f-vis").value;
-      const mes  = parseInt(document.getElementById("f-mes-crono").value);
-      const ano  = parseInt(document.getElementById("f-ano-crono").value);
-      const sup  = document.getElementById("f-sup-crono").value;
-      const mesMask = MESES[mes - 1];
+      const vis = document.getElementById("f-vis").value;
+      const mes = document.getElementById("f-mes-crono").value;
+      const ano = parseInt(document.getElementById("f-ano-crono").value);
+      const sup = document.getElementById("f-sup-crono").value;
 
       let lista = todosOS.filter(o => {
         if (sup && o.supervisao !== sup) return false;
-        if (vis === "mensal") return o.mes === mesMask && String(o.ano) === String(ano);
-        return String(o.ano) === String(ano);
+        const oMes = (o.mes||"").toUpperCase().trim();
+        const oAno = String(o.ano||"").trim();
+        if (vis === "mensal") return oMes === mes.toUpperCase() && oAno === String(ano);
+        return oAno === String(ano);
       });
 
       document.getElementById("titulo-crono").textContent =
-        vis === "mensal" ? `Cronograma — ${mesMask}/${ano}` : `Cronograma Anual — ${ano}`;
+        vis === "mensal" ? `Cronograma — ${mes}/${ano}` : `Cronograma Anual — ${ano}`;
       document.getElementById("loading-crono").style.display = "none";
       document.getElementById("crono-wrap").style.display = "block";
 
-      if (vis === "mensal") renderMensal(lista, ano, mes);
+      if (vis === "mensal") renderMensal(lista, ano, MESES_IDX[mes]+1);
       else renderAnual(lista, ano);
     }
 
-    function renderMensal(lista, ano, mes) {
-      const diasNoMes = new Date(ano, mes, 0).getDate();
+    function renderMensal(lista, ano, mesNum) {
+      const diasNoMes = new Date(ano, mesNum, 0).getDate();
       const hoje = new Date();
-      let thead = `<tr><th class="col-sigla">Sigla</th><th class="col-cliente">Unidade / Supervisor</th>`;
-      for (let d = 1; d <= diasNoMes; d++) thead += `<th>${d}</th>`;
+
+      let thead = `<tr><th class="col-sigla">Sigla</th><th class="col-cliente">Unidade / Supervisor</th><th>Status</th>`;
+      for (let d=1; d<=diasNoMes; d++) {
+        const dt = new Date(ano, mesNum-1, d);
+        const ehHoje = dt.toDateString() === hoje.toDateString();
+        thead += `<th style="${ehHoje?'background:#e8631a;color:#fff':''}"">${d}</th>`;
+      }
       thead += `</tr>`;
 
+      if (!lista.length) {
+        document.getElementById("crono-table").innerHTML =
+          `<thead>${thead}</thead><tbody><tr><td colspan="${diasNoMes+3}">
+          <div class="empty-state"><div class="empty-icon">📅</div>
+          <p>Nenhuma OS encontrada para ${document.getElementById("f-mes-crono").value}/${ano}</p>
+          <p style="font-size:.8rem;margin-top:8px">Use o botão <strong>⚡ Gerar Cronograma</strong> para criar OS deste mês</p>
+          </div></td></tr></tbody>`;
+        return;
+      }
+
       const rows = lista.map(os => {
-        let inicio = os.dataInicio ? (os.dataInicio.toDate ? os.dataInicio.toDate() : new Date(os.dataInicio)) : null;
+        const st  = normalizarStatus(os.status);
+        const cfg = STATUS_CONFIG[st] || { cor: "#e2e8f0", texto: "#333" };
+        let inicio  = os.dataInicio  ? (os.dataInicio.toDate  ? os.dataInicio.toDate()  : new Date(os.dataInicio))  : null;
         let termino = os.dataTermino ? (os.dataTermino.toDate ? os.dataTermino.toDate() : new Date(os.dataTermino)) : null;
-        const cfg = STATUS_CONFIG[os.status] || { cor: "#e2e8f0", texto: "#333" };
+
         let diasHtml = "";
-        for (let d = 1; d <= diasNoMes; d++) {
-          const dt = new Date(ano, mes - 1, d);
+        for (let d=1; d<=diasNoMes; d++) {
+          const dt = new Date(ano, mesNum-1, d);
           const ehHoje = dt.toDateString() === hoje.toDateString();
-          let cor = "";
-          if (inicio && termino) {
-            if (dt >= inicio && dt <= termino) cor = cfg.cor;
-          } else if (inicio && dt.getDate() === inicio.getDate() && dt.getMonth() === inicio.getMonth()) {
-            cor = cfg.cor;
-          }
-          diasHtml += `<td style="text-align:center;padding:2px">
-            <div class="dia-slot ${cor?'':'vazio'} ${ehHoje?'hoje':''}"
-              style="${cor?`background:${cor};color:${cfg.texto||'#fff'}`:'opacity:.3'}"
-              onclick="${cor?`abrirModalCrono('${os.id}')`:''}">
-              ${cor ? "✓" : ""}
+          let ativo = false;
+          if (inicio && termino) ativo = dt >= inicio && dt <= termino;
+          else if (inicio) ativo = dt.toDateString() === inicio.toDateString();
+
+          diasHtml += `<td style="text-align:center;padding:1px">
+            <div class="dia-slot ${ativo?'':'vazio'} ${ehHoje?'hoje':''}"
+              style="${ativo?`background:${cfg.cor};color:${cfg.texto||'#fff'}`:'background:#f7fafc;opacity:.4'}"
+              onclick="abrirModalCrono('${os.id}')">
+              ${ativo?"✓":""}
             </div></td>`;
         }
+
+        const statusBarra = `<span class="status-barra" style="background:${cfg.cor};color:${cfg.texto||'#fff'}">${st}</span>`;
         return `<tr>
-          <td class="col-sigla">${os.sigla||"—"}</td>
-          <td class="col-cliente" title="${os.cliente||''}">${os.cliente||"—"}<br>
+          <td class="col-sigla" style="cursor:pointer" onclick="abrirModalCrono('${os.id}')">${os.sigla||"—"}</td>
+          <td class="col-cliente" title="${os.cliente||''}" style="cursor:pointer" onclick="abrirModalCrono('${os.id}')">${os.cliente||"—"}<br>
             <span style="color:#718096;font-size:.7rem">${os.supervisao||""}</span></td>
+          <td style="white-space:nowrap">${statusBarra}</td>
           ${diasHtml}
         </tr>`;
       });
 
       document.getElementById("crono-table").innerHTML =
-        `<thead>${thead}</thead><tbody>${rows.join("") || '<tr><td colspan="33"><div class="empty-state"><div class="empty-icon">📅</div><p>Nenhuma OS encontrada para este período</p></div></td></tr>'}</tbody>`;
+        `<thead>${thead}</thead><tbody>${rows.join("")}</tbody>`;
     }
 
     function renderAnual(lista, ano) {
@@ -216,55 +276,56 @@
       const rows = lista.map(os => {
         let mesesHtml = "";
         MESES.forEach(m => {
-          const temOS = os.mes === m;
-          const cfg = STATUS_CONFIG[os.status] || { cor: "#e2e8f0" };
+          const oMes = (os.mes||"").toUpperCase().trim();
+          const temOS = oMes === m;
+          const st  = normalizarStatus(os.status);
+          const cfg = STATUS_CONFIG[st] || { cor: "#e2e8f0" };
           mesesHtml += `<td style="text-align:center;padding:2px">
             <div class="dia-slot ${temOS?'':'vazio'}"
-              style="${temOS?`background:${cfg.cor};color:#fff`:'opacity:.2'}"
+              style="${temOS?`background:${cfg.cor};color:#fff`:'opacity:.15'}"
               onclick="${temOS?`abrirModalCrono('${os.id}')`:''}">
-              ${temOS ? "●" : ""}
+              ${temOS?"●":""}
             </div></td>`;
         });
         return `<tr>
           <td class="col-sigla">${os.sigla||"—"}</td>
-          <td class="col-cliente" title="${os.cliente||''}">${os.cliente||"—"}</td>
+          <td class="col-cliente">${os.cliente||"—"}</td>
           ${mesesHtml}
         </tr>`;
       });
 
       document.getElementById("crono-table").innerHTML =
-        `<thead>${thead}</thead><tbody>${rows.join("") || '<tr><td colspan="14"><div class="empty-state"><div class="empty-icon">📅</div><p>Nenhuma OS encontrada</p></div></td></tr>'}</tbody>`;
+        `<thead>${thead}</thead><tbody>${rows.join("")||'<tr><td colspan="14"><div class="empty-state"><p>Nenhuma OS encontrada</p></div></td></tr>'}</tbody>`;
     }
 
     function abrirModalCrono(osId) {
       osEditando = todosOS.find(o => o.id === osId);
       if (!osEditando) return;
       document.getElementById("crono-os-nome").textContent = `${osEditando.sigla} — ${osEditando.cliente}`;
-      const di = osEditando.dataInicio ? (osEditando.dataInicio.toDate ? osEditando.dataInicio.toDate() : new Date(osEditando.dataInicio)) : null;
+      const di = osEditando.dataInicio  ? (osEditando.dataInicio.toDate  ? osEditando.dataInicio.toDate()  : new Date(osEditando.dataInicio))  : null;
       const dt = osEditando.dataTermino ? (osEditando.dataTermino.toDate ? osEditando.dataTermino.toDate() : new Date(osEditando.dataTermino)) : null;
       document.getElementById("crono-data-inicio").value  = di ? di.toISOString().slice(0,10) : "";
       document.getElementById("crono-data-termino").value = dt ? dt.toISOString().slice(0,10) : "";
-      const statusList = Object.keys(STATUS_CONFIG);
       document.getElementById("crono-status-sel").innerHTML =
-        statusList.map(s => `<option value="${s}" ${s===osEditando.status?'selected':''}>${s}</option>`).join("");
+        Object.keys(STATUS_CONFIG).map(s => `<option value="${s}" ${normalizarStatus(osEditando.status)===s?'selected':''}>${s}</option>`).join("");
+      document.getElementById("crono-period-sel").value = osEditando.periodicidade || "";
       document.getElementById("modal-crono").style.display = "flex";
     }
 
-    function fecharModalCrono() {
-      document.getElementById("modal-crono").style.display = "none";
-      osEditando = null;
-    }
+    function fecharModalCrono() { document.getElementById("modal-crono").style.display="none"; osEditando=null; }
 
     async function salvarCrono() {
       if (!osEditando) return;
       const inicio  = document.getElementById("crono-data-inicio").value;
       const termino = document.getElementById("crono-data-termino").value;
       const status  = document.getElementById("crono-status-sel").value;
+      const period  = document.getElementById("crono-period-sel").value;
       const updates = {
-        status,
+        status, periodicidade: period,
         alteradoManualmente: true,
         alteradoPor: currentUserData.nome,
-        alteradoEm: firebase.firestore.FieldValue.serverTimestamp()
+        alteradoEm: firebase.firestore.FieldValue.serverTimestamp(),
+        syncPendente: true
       };
       if (inicio)  updates.dataInicio  = firebase.firestore.Timestamp.fromDate(new Date(inicio));
       if (termino) updates.dataTermino = firebase.firestore.Timestamp.fromDate(new Date(termino));
@@ -275,24 +336,127 @@
       await carregarOS();
     }
 
+    // ── Gerar Cronograma ──────────────────────────────────────
+    function abrirGerarCronograma() {
+      const mesAtual = MESES[new Date().getMonth()];
+      document.getElementById("g-mes").value = mesAtual;
+      document.getElementById("g-ano").value = new Date().getFullYear();
+      document.getElementById("g-preview").style.display = "none";
+      document.getElementById("modal-gerar").style.display = "flex";
+    }
+    function fecharModalGerar() { document.getElementById("modal-gerar").style.display="none"; gerarPreview=[]; }
+
+    async function previewGerar() {
+      const mes = document.getElementById("g-mes").value;
+      const ano = parseInt(document.getElementById("g-ano").value);
+      const sup = document.getElementById("g-sup").value;
+      gerarPreview = calcularNovasOS(mes, ano, sup);
+      const prev = document.getElementById("g-preview");
+      prev.style.display = "block";
+      document.getElementById("g-preview-txt").innerHTML =
+        gerarPreview.length > 0
+          ? `✅ Serão geradas <strong>${gerarPreview.length}</strong> novas OS para ${mes}/${ano}.`
+          : `⚠️ Nenhuma OS nova a gerar para ${mes}/${ano}. Verifique se há OS concluídas com periodicidade cadastrada.`;
+    }
+
+    function calcularNovasOS(mes, ano, sup) {
+      const PERIODOS = { "MENSAL":30,"BIMESTRAL":60,"TRIMESTRAL":90,"SEMESTRAL":180,"ANUAL":365 };
+      const STATUS_OK = ["CONCLUIDA","CONCLUIDO","VALIDADA","CONFORME CRONOGRAMA","AUDITADA","FATURADA"];
+      const mesIdx = MESES.indexOf(mes);
+      const inicioMes = new Date(ano, mesIdx, 1);
+      const fimMes    = new Date(ano, mesIdx+1, 0);
+
+      // Agrupa OS por unidade, pega a mais recente concluída
+      const porUnidade = {};
+      todosOS.forEach(os => {
+        if (sup && os.supervisao !== sup) return;
+        const st = normalizarStatus(os.status);
+        if (!STATUS_OK.includes(st)) return;
+        const chave = `${os.sigla}|${os.cliente}`;
+        if (!porUnidade[chave] || (os.dataTermino && (!porUnidade[chave].dataTermino ||
+          (os.dataTermino.toDate?os.dataTermino.toDate():new Date(os.dataTermino)) >
+          (porUnidade[chave].dataTermino.toDate?porUnidade[chave].dataTermino.toDate():new Date(porUnidade[chave].dataTermino))
+        ))) porUnidade[chave] = os;
+      });
+
+      // Verifica quais unidades já têm OS no mês alvo
+      const jaTemNoMes = new Set();
+      todosOS.forEach(os => {
+        if ((os.mes||"").toUpperCase()===mes && String(os.ano)===String(ano))
+          jaTemNoMes.add(`${os.sigla}|${os.cliente}`);
+      });
+
+      const novas = [];
+      Object.values(porUnidade).forEach(os => {
+        const chave = `${os.sigla}|${os.cliente}`;
+        if (jaTemNoMes.has(chave)) return;
+        const periodo = (os.periodicidade||"MENSAL").toUpperCase();
+        const dias = PERIODOS[periodo] || 30;
+        const ultimaData = os.dataTermino
+          ? (os.dataTermino.toDate ? os.dataTermino.toDate() : new Date(os.dataTermino))
+          : null;
+        if (!ultimaData) return;
+        const proxData = new Date(ultimaData);
+        proxData.setDate(proxData.getDate() + dias);
+        if (proxData >= inicioMes && proxData <= fimMes) {
+          const termino = new Date(proxData);
+          termino.setDate(termino.getDate() + 2);
+          novas.push({ ...os, id: null, mes, ano: String(ano),
+            status: "PROGRAMADA", dataInicio: proxData, dataTermino: termino,
+            periodicidade: periodo, alteradoManualmente: false, syncPendente: true
+          });
+        }
+      });
+      return novas;
+    }
+
+    async function confirmarGerar() {
+      const mes = document.getElementById("g-mes").value;
+      const ano = parseInt(document.getElementById("g-ano").value);
+      const sup = document.getElementById("g-sup").value;
+      if (!gerarPreview.length) { await previewGerar(); }
+      if (!gerarPreview.length) { toast("Nenhuma OS para gerar.", "aviso"); return; }
+
+      const LOTE = 400;
+      let count = 0;
+      for (let i=0; i<gerarPreview.length; i+=LOTE) {
+        const batch = db.batch();
+        gerarPreview.slice(i,i+LOTE).forEach(os => {
+          const ref = db.collection("ordens_servico").doc();
+          const { id: _id, ...dados } = os;
+          batch.set(ref, {
+            ...dados,
+            dataInicio:  firebase.firestore.Timestamp.fromDate(new Date(dados.dataInicio)),
+            dataTermino: firebase.firestore.Timestamp.fromDate(new Date(dados.dataTermino)),
+            criadoEm:    firebase.firestore.FieldValue.serverTimestamp(),
+            geradoAutomaticamente: true
+          });
+          count++;
+        });
+        await batch.commit();
+      }
+      await registrarLog("cronograma", "geracao", "gerar", "", `${count} OS geradas para ${mes}/${ano}`);
+      toast(`✅ ${count} OS geradas para ${mes}/${ano}!`);
+      fecharModalGerar();
+      await carregarOS();
+    }
+
     function exportarCrono() {
       const vis = document.getElementById("f-vis").value;
-      const mes = parseInt(document.getElementById("f-mes-crono").value);
+      const mes = document.getElementById("f-mes-crono").value;
       const ano = parseInt(document.getElementById("f-ano-crono").value);
       const sup = document.getElementById("f-sup-crono").value;
-      const mesMask = MESES[mes - 1];
-      let lista = todosOS.filter(o => {
+      const lista = todosOS.filter(o => {
         if (sup && o.supervisao !== sup) return false;
-        if (vis === "mensal") return o.mes === mesMask && String(o.ano) === String(ano);
-        return String(o.ano) === String(ano);
+        if (vis==="mensal") return (o.mes||"").toUpperCase()===mes && String(o.ano)===String(ano);
+        return String(o.ano)===String(ano);
       });
-      const dados = lista.map(os => ({
-        Sigla: os.sigla, Unidade: os.cliente, Supervisor: os.supervisao,
-        Mês: os.mes, Ano: os.ano, Status: os.status,
-        DataInicio: fmtData(os.dataInicio), DataTermino: fmtData(os.dataTermino),
-        Periodicidade: os.periodicidade
-      }));
-      exportarExcel(dados, `cronograma_${vis}_${ano}`);
+      exportarExcel(lista.map(os => ({
+        Sigla:os.sigla, Unidade:os.cliente, Supervisor:os.supervisao,
+        Mês:os.mes, Ano:os.ano, Status:os.status,
+        DataInicio:fmtData(os.dataInicio), DataTermino:fmtData(os.dataTermino),
+        Periodicidade:os.periodicidade
+      })), `cronograma_${vis}_${ano}`);
     }
   </script>
 </body>
