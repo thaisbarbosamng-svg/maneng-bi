@@ -52,7 +52,6 @@
       </div>
     </div>
   </div>
-
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
@@ -60,173 +59,66 @@
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <script src="/maneng-bi/js/config.js"></script>
   <script src="/maneng-bi/js/auth.js"></script>
-  <script src="/maneng-bi/js/utils.js"></script>
   <script>
-    let dadosAtuais = [], chartGauge, chartCrono, chartPizza, chartSup;
-    const MESES_LIST = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
+    const MESES_LIST=["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
+    function normalizarStatus(s){if(!s)return"PROGRAMADA";const m={"PROGRAMADO":"PROGRAMADA","CONCLUIDO":"CONCLUIDA","VALIDADO":"VALIDADA","AUDITADO":"AUDITADA","FATURADO":"FATURADA"};const u=s.toString().trim().toUpperCase();return m[u]||u;}
+    function calcularIndicadores(lista){const total=lista.length;const OK=["CONCLUIDA","VALIDADA","AUDITADA","FATURADA","CONFORME CRONOGRAMA"];const PROG=["PROGRAMADA","PROGRAMADO"];const EX=["EM EXECUÇÃO","EM EXECUCAO"];const concluidas=lista.filter(o=>OK.includes(normalizarStatus(o.status))).length;const emAtraso=lista.filter(o=>normalizarStatus(o.status)==="EM ATRASO").length;const emExecucao=lista.filter(o=>EX.includes(normalizarStatus(o.status))).length;const programadas=lista.filter(o=>PROG.includes(normalizarStatus(o.status))).length;const semEquipe=lista.filter(o=>normalizarStatus(o.status)==="SEM EQUIPE").length;const taxaConclusao=total>0?((concluidas/total)*100).toFixed(2):0;const alteradas=lista.filter(o=>o.alteradoManualmente).length;const pctCumprido=total>0?(((total-alteradas)/total)*100).toFixed(2):0;const pctAlterado=total>0?(100-pctCumprido).toFixed(2):0;return{total,concluidas,emAtraso,emExecucao,programadas,semEquipe,taxaConclusao,pctCumprido,pctAlterado};}
+    function porSupervisor(lista){const OK=["CONCLUIDA","VALIDADA","AUDITADA","FATURADA","CONFORME CRONOGRAMA"];const mapa={};lista.forEach(os=>{const s=os.supervisao||"Sem Supervisor";if(!mapa[s])mapa[s]={supervisao:s,programadas:0,concluidas:0,emExecucao:0,emAtraso:0,semEquipe:0};const st=normalizarStatus(os.status);if(["PROGRAMADA","PROGRAMADO"].includes(st))mapa[s].programadas++;else if(OK.includes(st))mapa[s].concluidas++;else if(["EM EXECUÇÃO","EM EXECUCAO"].includes(st))mapa[s].emExecucao++;else if(st==="EM ATRASO")mapa[s].emAtraso++;else if(st==="SEM EQUIPE")mapa[s].semEquipe++;});return Object.values(mapa).sort((a,b)=>b.concluidas-a.concluidas);}
+    function popularSel(id,lista,campo,ph){const sel=document.getElementById(id);if(!sel)return;const v=[...new Set(lista.map(i=>i[campo]).filter(Boolean))].sort();sel.innerHTML=`<option value="">${ph}</option>`+v.map(x=>`<option value="${x}">${x}</option>`).join("");}
+    function exportarExcel(dados,nome){const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(dados),"Dados");XLSX.writeFile(wb,`${nome}_${new Date().toISOString().slice(0,10)}.xlsx`);}
 
-    requireAuth(async () => {
+    let dadosAtuais=[],chartGauge,chartCrono,chartPizza,chartSup;
+
+    requireAuth(async()=>{
       renderMenu("dashboard");
-      popularMesAno();
-      await carregarTodos();
-      document.getElementById("f-mes").addEventListener("change", renderDashboard);
-      document.getElementById("f-ano").addEventListener("change", renderDashboard);
-      document.getElementById("f-supervisor").addEventListener("change", renderDashboard);
-      document.getElementById("f-coordenador").addEventListener("change", renderDashboard);
-      document.getElementById("f-estado").addEventListener("change", renderDashboard);
+      const anoAtual=new Date().getFullYear();
+      const mesAtual=MESES_LIST[new Date().getMonth()];
+      document.getElementById("f-mes").innerHTML=`<option value="">Todos os meses</option>`+MESES_LIST.map(m=>`<option value="${m}"${m===mesAtual?" selected":""}>${m}</option>`).join("");
+      let ao=`<option value="">Todos os anos</option>`;for(let a=anoAtual-1;a<=anoAtual+1;a++)ao+=`<option value="${a}"${a===anoAtual?" selected":""}>${a}</option>`;
+      document.getElementById("f-ano").innerHTML=ao;
+      try{
+        const snap=await db.collection("ordens_servico").limit(2000).get();
+        dadosAtuais=snap.docs.map(d=>({id:d.id,...d.data()}));
+        popularSel("f-supervisor",dadosAtuais,"supervisao","Todos supervisores");
+        popularSel("f-coordenador",dadosAtuais,"coordenador","Todos coordenadores");
+        popularSel("f-estado",dadosAtuais,"estado","Todos os estados");
+        document.getElementById("loading").style.display="none";
+        document.getElementById("dashboard-content").style.display="block";
+        renderD();
+        ["f-mes","f-ano","f-supervisor","f-coordenador","f-estado"].forEach(id=>document.getElementById(id).addEventListener("change",renderD));
+      }catch(e){document.getElementById("loading").innerHTML=`<span style="color:#C00000">Erro: ${e.message}</span>`;}
     });
 
-    function popularMesAno() {
-      const anoAtual = new Date().getFullYear();
-      const mesAtual = MESES_LIST[new Date().getMonth()];
-      document.getElementById("f-mes").innerHTML =
-        `<option value="">Todos os meses</option>` +
-        MESES_LIST.map(m => `<option value="${m}" ${m===mesAtual?'selected':''}>${m}</option>`).join("");
-      let anosOpt = `<option value="">Todos os anos</option>`;
-      for (let a = anoAtual-1; a <= anoAtual+1; a++)
-        anosOpt += `<option value="${a}" ${a===anoAtual?'selected':''}>${a}</option>`;
-      document.getElementById("f-ano").innerHTML = anosOpt;
+    function renderD(){
+      const mes=document.getElementById("f-mes").value,ano=document.getElementById("f-ano").value,sup=document.getElementById("f-supervisor").value,coord=document.getElementById("f-coordenador").value,est=document.getElementById("f-estado").value;
+      const lista=dadosAtuais.filter(o=>{if(mes&&(o.mes||"").toUpperCase()!==mes)return false;if(ano&&String(o.ano)!==String(ano))return false;if(sup&&o.supervisao!==sup)return false;if(coord&&o.coordenador!==coord)return false;if(est&&o.estado!==est)return false;return true;});
+      const ind=calcularIndicadores(lista);
+      document.getElementById("kpi-grid").innerHTML=`
+        <div class="kpi-card"><div class="kpi-icon">📋</div><div class="kpi-info"><div class="kpi-label">OS Programadas</div><div class="kpi-value">${ind.programadas}</div></div></div>
+        <div class="kpi-card success-card"><div class="kpi-icon">✅</div><div class="kpi-info"><div class="kpi-label">OS Concluídas</div><div class="kpi-value">${ind.concluidas}</div></div></div>
+        <div class="kpi-card warning-card"><div class="kpi-icon">🔧</div><div class="kpi-info"><div class="kpi-label">Em Andamento</div><div class="kpi-value">${ind.emExecucao}</div></div></div>
+        <div class="kpi-card danger-card"><div class="kpi-icon">⏰</div><div class="kpi-info"><div class="kpi-label">Em Atraso</div><div class="kpi-value">${ind.emAtraso}</div></div></div>
+        <div class="kpi-card"><div class="kpi-icon">👥</div><div class="kpi-info"><div class="kpi-label">Sem Equipe</div><div class="kpi-value">${ind.semEquipe}</div></div></div>
+        <div class="kpi-card accent-card"><div class="kpi-icon">🚨</div><div class="kpi-info"><div class="kpi-label">Total</div><div class="kpi-value large">${ind.total}</div></div></div>
+        <div class="kpi-card"><div class="kpi-icon">🎯</div><div class="kpi-info"><div class="kpi-label">Meta Estimada</div><div class="kpi-value">100,00%</div></div></div>
+        <div class="kpi-card success-card"><div class="kpi-icon">📈</div><div class="kpi-info"><div class="kpi-label">Taxa de Conclusão</div><div class="kpi-value">${Number(ind.taxaConclusao).toLocaleString("pt-BR",{minimumFractionDigits:2})}%</div></div></div>`;
+      if(chartGauge)chartGauge.destroy();
+      const taxa=parseFloat(ind.taxaConclusao);
+      chartGauge=new Chart(document.getElementById("chart-gauge").getContext("2d"),{type:"doughnut",data:{datasets:[{data:[taxa,100-taxa],backgroundColor:["#00B050","#e2e8f0"],borderWidth:0,circumference:180,rotation:270}]},options:{cutout:"70%",responsive:true,plugins:{legend:{display:false},tooltip:{enabled:false}}}});
+      document.getElementById("gauge-val").textContent=taxa.toLocaleString("pt-BR",{minimumFractionDigits:2})+"%";
+      if(chartCrono)chartCrono.destroy();
+      chartCrono=new Chart(document.getElementById("chart-cronograma").getContext("2d"),{type:"doughnut",data:{labels:["Cumprido","Alterado"],datasets:[{data:[ind.pctCumprido,ind.pctAlterado],backgroundColor:["#1a2a4a","#4DA6FF"],borderWidth:0}]},options:{responsive:true,plugins:{legend:{position:"bottom"}}}});
+      const sc={};lista.forEach(o=>{const st=normalizarStatus(o.status);sc[st]=(sc[st]||0)+1;});const sl=Object.keys(sc);
+      if(chartPizza)chartPizza.destroy();
+      chartPizza=new Chart(document.getElementById("chart-pizza").getContext("2d"),{type:"pie",data:{labels:sl,datasets:[{data:sl.map(s=>sc[s]),backgroundColor:sl.map(s=>(STATUS_CONFIG[s]||{cor:"#999"}).cor),borderWidth:1}]},options:{responsive:true,plugins:{legend:{position:"right",labels:{boxWidth:12,font:{size:10}}}}}});
+      const ps=porSupervisor(lista);
+      if(chartSup)chartSup.destroy();
+      const cv=document.getElementById("chart-supervisor");cv.height=Math.max(200,ps.length*30);
+      chartSup=new Chart(cv.getContext("2d"),{type:"bar",data:{labels:ps.map(s=>s.supervisao),datasets:[{label:"Programadas",data:ps.map(s=>s.programadas),backgroundColor:"#4DA6FF"},{label:"Concluídas",data:ps.map(s=>s.concluidas),backgroundColor:"#00B050"},{label:"Em Execução",data:ps.map(s=>s.emExecucao),backgroundColor:"#FF9900"},{label:"Em Atraso",data:ps.map(s=>s.emAtraso),backgroundColor:"#C00000"},{label:"Sem Equipe",data:ps.map(s=>s.semEquipe),backgroundColor:"#843C0C"}]},options:{indexAxis:"y",responsive:true,plugins:{legend:{position:"top",labels:{boxWidth:12,font:{size:10}}}},scales:{x:{stacked:false},y:{ticks:{font:{size:10}}}}}});
+      document.getElementById("tabela-supervisores").innerHTML=ps.length?ps.map(s=>{const tot=s.programadas+s.concluidas+s.emExecucao+s.emAtraso+s.semEquipe;const t=tot>0?((s.concluidas/tot)*100).toFixed(1):0;return`<tr><td><strong>${s.supervisao}</strong></td><td style="color:#4DA6FF;font-weight:600">${s.programadas}</td><td style="color:#00B050;font-weight:600">${s.concluidas}</td><td style="color:#FF9900;font-weight:600">${s.emExecucao}</td><td style="color:#C00000;font-weight:600">${s.emAtraso}</td><td style="color:#843C0C;font-weight:600">${s.semEquipe}</td><td><strong>${t}%</strong></td></tr>`;}).join(""):`<tr><td colspan="7"><div class="empty-state"><p>Nenhum dado</p></div></td></tr>`;
     }
 
-    async function carregarTodos() {
-      try {
-        // Carrega todos os dados sem filtro de índice composto
-        const snap = await db.collection("ordens_servico").limit(2000).get();
-        dadosAtuais = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        dadosAtuais.forEach(o => { o.statusNorm = normalizarStatus(o.status); });
-
-        popularSelect("f-supervisor",  dadosAtuais, "supervisao",  "Todos supervisores");
-        popularSelect("f-coordenador", dadosAtuais, "coordenador", "Todos coordenadores");
-        popularSelect("f-estado",      dadosAtuais, "estado",      "Todos os estados");
-
-        document.getElementById("loading").style.display = "none";
-        document.getElementById("dashboard-content").style.display = "block";
-        renderDashboard();
-      } catch(e) {
-        document.getElementById("loading").innerHTML =
-          `<span style="color:#C00000">Erro: ${e.message}</span>`;
-      }
-    }
-
-    function renderDashboard() {
-      const mes  = document.getElementById("f-mes").value;
-      const ano  = document.getElementById("f-ano").value;
-      const sup  = document.getElementById("f-supervisor").value;
-      const coord= document.getElementById("f-coordenador").value;
-      const est  = document.getElementById("f-estado").value;
-
-      const lista = dadosAtuais.filter(o => {
-        if (mes   && (o.mes||"").toUpperCase() !== mes)   return false;
-        if (ano   && String(o.ano) !== String(ano))       return false;
-        if (sup   && o.supervisao  !== sup)               return false;
-        if (coord && o.coordenador !== coord)             return false;
-        if (est   && o.estado      !== est)               return false;
-        return true;
-      });
-
-      const ind = calcularIndicadores(lista);
-      renderKPIs(ind);
-      renderCharts(ind, lista);
-      renderTabelaSupervisores(lista);
-    }
-
-    function renderKPIs(ind) {
-      document.getElementById("kpi-grid").innerHTML = `
-        <div class="kpi-card"><div class="kpi-icon">📋</div>
-          <div class="kpi-info"><div class="kpi-label">OS Programadas</div><div class="kpi-value">${ind.programadas}</div></div></div>
-        <div class="kpi-card success-card"><div class="kpi-icon">✅</div>
-          <div class="kpi-info"><div class="kpi-label">OS Concluídas</div><div class="kpi-value">${ind.concluidas}</div></div></div>
-        <div class="kpi-card warning-card"><div class="kpi-icon">🔧</div>
-          <div class="kpi-info"><div class="kpi-label">Em Andamento</div><div class="kpi-value">${ind.emExecucao}</div></div></div>
-        <div class="kpi-card danger-card"><div class="kpi-icon">⏰</div>
-          <div class="kpi-info"><div class="kpi-label">Em Atraso</div><div class="kpi-value">${ind.emAtraso}</div></div></div>
-        <div class="kpi-card"><div class="kpi-icon">👥</div>
-          <div class="kpi-info"><div class="kpi-label">Sem Equipe</div><div class="kpi-value">${ind.semEquipe}</div></div></div>
-        <div class="kpi-card accent-card"><div class="kpi-icon">🚨</div>
-          <div class="kpi-info"><div class="kpi-label">Total</div><div class="kpi-value large">${ind.total}</div></div></div>
-        <div class="kpi-card"><div class="kpi-icon">🎯</div>
-          <div class="kpi-info"><div class="kpi-label">Meta Estimada</div><div class="kpi-value">100,00%</div></div></div>
-        <div class="kpi-card success-card"><div class="kpi-icon">📈</div>
-          <div class="kpi-info"><div class="kpi-label">Taxa de Conclusão</div>
-          <div class="kpi-value">${Number(ind.taxaConclusao).toLocaleString("pt-BR",{minimumFractionDigits:2})}%</div></div></div>`;
-    }
-
-    function renderCharts(ind, lista) {
-      if (chartGauge) chartGauge.destroy();
-      const taxa = parseFloat(ind.taxaConclusao);
-      chartGauge = new Chart(document.getElementById("chart-gauge").getContext("2d"), {
-        type:"doughnut",
-        data:{datasets:[{data:[taxa,100-taxa],backgroundColor:["#00B050","#e2e8f0"],borderWidth:0,circumference:180,rotation:270}]},
-        options:{cutout:"70%",responsive:true,plugins:{legend:{display:false},tooltip:{enabled:false}}}
-      });
-      document.getElementById("gauge-val").textContent = taxa.toLocaleString("pt-BR",{minimumFractionDigits:2})+"%";
-
-      if (chartCrono) chartCrono.destroy();
-      chartCrono = new Chart(document.getElementById("chart-cronograma").getContext("2d"), {
-        type:"doughnut",
-        data:{labels:["Cumprido","Alterado"],datasets:[{data:[ind.pctCumprido,ind.pctAlterado],backgroundColor:["#1a2a4a","#4DA6FF"],borderWidth:0}]},
-        options:{responsive:true,plugins:{legend:{position:"bottom"}}}
-      });
-
-      const statusCount = {};
-      lista.forEach(o=>{const st=normalizarStatus(o.status);statusCount[st]=(statusCount[st]||0)+1;});
-      const stLabels = Object.keys(statusCount);
-      if (chartPizza) chartPizza.destroy();
-      chartPizza = new Chart(document.getElementById("chart-pizza").getContext("2d"), {
-        type:"pie",
-        data:{labels:stLabels,datasets:[{data:stLabels.map(s=>statusCount[s]),backgroundColor:stLabels.map(s=>(STATUS_CONFIG[s]||{cor:"#999"}).cor),borderWidth:1}]},
-        options:{responsive:true,plugins:{legend:{position:"right",labels:{boxWidth:12,font:{size:10}}}}}
-      });
-
-      const porSup = porSupervisor(lista);
-      if (chartSup) chartSup.destroy();
-      const canvas = document.getElementById("chart-supervisor");
-      canvas.height = Math.max(200, porSup.length*30);
-      chartSup = new Chart(canvas.getContext("2d"), {
-        type:"bar",
-        data:{labels:porSup.map(s=>s.supervisao),datasets:[
-          {label:"Programadas",data:porSup.map(s=>s.programadas),backgroundColor:"#4DA6FF"},
-          {label:"Concluídas", data:porSup.map(s=>s.concluidas), backgroundColor:"#00B050"},
-          {label:"Em Execução",data:porSup.map(s=>s.emExecucao), backgroundColor:"#FF9900"},
-          {label:"Em Atraso",  data:porSup.map(s=>s.emAtraso),   backgroundColor:"#C00000"},
-          {label:"Sem Equipe", data:porSup.map(s=>s.semEquipe),  backgroundColor:"#843C0C"}
-        ]},
-        options:{indexAxis:"y",responsive:true,plugins:{legend:{position:"top",labels:{boxWidth:12,font:{size:10}}}},scales:{x:{stacked:false},y:{ticks:{font:{size:10}}}}}
-      });
-    }
-
-    function renderTabelaSupervisores(lista) {
-      const porSup = porSupervisor(lista);
-      document.getElementById("tabela-supervisores").innerHTML = porSup.length
-        ? porSup.map(s=>{
-            const tot=s.programadas+s.concluidas+s.emExecucao+s.emAtraso+s.semEquipe;
-            const taxa=tot>0?((s.concluidas/tot)*100).toFixed(1):0;
-            return `<tr>
-              <td><strong>${s.supervisao}</strong></td>
-              <td style="color:#4DA6FF;font-weight:600">${s.programadas}</td>
-              <td style="color:#00B050;font-weight:600">${s.concluidas}</td>
-              <td style="color:#FF9900;font-weight:600">${s.emExecucao}</td>
-              <td style="color:#C00000;font-weight:600">${s.emAtraso}</td>
-              <td style="color:#843C0C;font-weight:600">${s.semEquipe}</td>
-              <td><strong>${taxa}%</strong></td>
-            </tr>`;
-          }).join("")
-        : `<tr><td colspan="7"><div class="empty-state"><p>Nenhum dado</p></div></td></tr>`;
-    }
-
-    function exportarResumo() {
-      const mes=document.getElementById("f-mes").value;
-      const ano=document.getElementById("f-ano").value;
-      const lista=dadosAtuais.filter(o=>{
-        if(mes&&(o.mes||"").toUpperCase()!==mes)return false;
-        if(ano&&String(o.ano)!==String(ano))return false;
-        return true;
-      });
-      exportarExcel(porSupervisor(lista).map(s=>({
-        Supervisor:s.supervisao,Programadas:s.programadas,Concluídas:s.concluidas,
-        EmExecução:s.emExecucao,EmAtraso:s.emAtraso,SemEquipe:s.semEquipe
-      })),"resumo_supervisores");
-    }
+    function exportarResumo(){const mes=document.getElementById("f-mes").value,ano=document.getElementById("f-ano").value;const lista=dadosAtuais.filter(o=>{if(mes&&(o.mes||"").toUpperCase()!==mes)return false;if(ano&&String(o.ano)!==String(ano))return false;return true;});exportarExcel(porSupervisor(lista).map(s=>({Supervisor:s.supervisao,Programadas:s.programadas,Concluídas:s.concluidas,EmExecução:s.emExecucao,EmAtraso:s.emAtraso,SemEquipe:s.semEquipe})),"resumo_supervisores");}
   </script>
 </body>
 </html>
