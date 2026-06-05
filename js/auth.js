@@ -33,6 +33,7 @@ function renderMenu(paginaAtiva) {
       <a href="/maneng-bi/os.html"         class="${paginaAtiva==='os'        ?'active':''}"><span class="nav-icon">🔧</span> Ordens de Serviço</a>
       <a href="/maneng-bi/clientes.html"   class="${paginaAtiva==='clientes'  ?'active':''}"><span class="nav-icon">🏪</span> Clientes</a>
       <a href="/maneng-bi/equipes.html"    class="${paginaAtiva==='equipes'   ?'active':''}"><span class="nav-icon">👥</span> Equipes</a>
+      <a href="/maneng-bi/alertas.html"    class="${paginaAtiva==='alertas'   ?'active':''}" style="color:#FF9900"><span class="nav-icon">⚠️</span> Alertas</a>
       <a href="/maneng-bi/auditoria.html"  class="${paginaAtiva==='auditoria' ?'active':''}"><span class="nav-icon">🔍</span> Auditoria</a>
     </nav>
     <div class="sidebar-footer"><button onclick="logout()" class="btn-logout">Sair</button></div>`;
@@ -40,14 +41,14 @@ function renderMenu(paginaAtiva) {
 
 async function carregarDados() {
   const resp = await fetch("/maneng-bi/data/ordens_servico.json?t=" + Date.now());
-  if (!resp.ok) throw new Error("JSON não encontrado. Execute a sincronização no GitHub Actions.");
+  if (!resp.ok) throw new Error("Arquivo de dados não encontrado. Execute a sincronização no GitHub Actions.");
   const json = await resp.json();
   return json.registros || [];
 }
 
 function normalizarStatus(s) {
-  if (!s) return "PROGRAMADA";
-  const m = {"PROGRAMADO":"PROGRAMADA","CONCLUIDO":"CONCLUIDA","VALIDADO":"VALIDADA","AUDITADO":"AUDITADA","FATURADO":"FATURADA"};
+  if (!s) return "PROGRAMADO";
+  const m = {"PROGRAMADA":"PROGRAMADO","CONCLUIDO":"CONCLUIDA","VALIDADO":"VALIDADA","AUDITADO":"AUDITADA","FATURADO":"FATURADA"};
   const u = s.toString().trim().toUpperCase();
   return m[u] || u;
 }
