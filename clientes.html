@@ -7,20 +7,14 @@
   <link rel="stylesheet" href="/maneng-bi/css/main.css">
 </head>
 <body>
-  <aside class="sidebar">
-    <div class="sidebar-logo"><span>man<span class="accent">eng</span></span></div>
-    <div id="sidebar"></div>
-  </aside>
-
+  <aside class="sidebar"><div class="sidebar-logo"><span>man<span class="accent">eng</span></span></div><div id="sidebar"></div></aside>
   <div class="main">
     <div class="topbar">
       <div class="topbar-title">Cadastro de Clientes</div>
       <div class="topbar-filters">
-        <button class="btn btn-accent btn-sm" onclick="abrirNovoCliente()">+ Novo Cliente</button>
-        <button class="btn btn-outline btn-sm" onclick="exportarClientes()" style="color:#fff;border-color:rgba(255,255,255,.3)">⬇ Excel</button>
+        <button class="btn btn-outline btn-sm" onclick="exportar()" style="color:#fff;border-color:rgba(255,255,255,.3)">⬇ Excel</button>
       </div>
     </div>
-
     <div class="content">
       <div class="filters-bar">
         <div class="filter-group"><label>Buscar</label><input type="text" id="f-busca" placeholder="Sigla ou unidade..." oninput="filtrar()"></div>
@@ -28,217 +22,78 @@
         <div class="filter-group"><label>Supervisor</label><select id="f-sup" onchange="filtrar()"></select></div>
         <div class="filter-group"><label>Estado</label><select id="f-estado" onchange="filtrar()"></select></div>
       </div>
-
       <div class="table-card">
-        <div class="table-header">
-          <h3>Clientes <span id="contador" style="color:#718096;font-weight:400;font-size:.85rem"></span></h3>
-        </div>
+        <div class="table-header"><h3>Clientes <span id="contador" style="color:#718096;font-size:.85rem;font-weight:400"></span></h3></div>
+        <div id="loading" class="loading"><div class="spinner"></div> Carregando...</div>
         <div style="overflow-x:auto">
           <table>
-            <thead>
-              <tr><th>Bandeira</th><th>Unidade</th><th>Estado</th><th>Supervisor</th><th>PCM</th><th>Coordenador</th><th>Periodicidade</th><th>Ações</th></tr>
-            </thead>
-            <tbody id="tabela-clientes"></tbody>
+            <thead><tr><th>Bandeira</th><th>Unidade</th><th>Estado</th><th>Supervisor</th><th>PCM</th><th>Coordenador</th><th>Periodicidade</th></tr></thead>
+            <tbody id="tbody"></tbody>
           </table>
         </div>
-        <div class="pagination" id="pagination"></div>
+        <div class="pagination" id="pag"></div>
       </div>
     </div>
   </div>
-
-  <!-- Modal -->
-  <div id="modal-cliente" class="modal-overlay" style="display:none">
-    <div class="modal" style="max-width:640px">
-      <div class="modal-header">
-        <h3 id="modal-titulo">Novo Cliente</h3>
-        <button class="modal-close" onclick="fecharModal()">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-row">
-          <div class="form-group"><label>Bandeira (Sigla) *</label><input id="c-sigla" type="text"></div>
-          <div class="form-group"><label>Unidade (Cliente) *</label><input id="c-cliente" type="text"></div>
-        </div>
-        <div class="form-row">
-          <div class="form-group"><label>Estado</label><input id="c-estado" type="text"></div>
-          <div class="form-group"><label>Supervisor</label><input id="c-supervisor" type="text"></div>
-        </div>
-        <div class="form-row">
-          <div class="form-group"><label>PCM</label><input id="c-pcm" type="text"></div>
-          <div class="form-group"><label>Coordenador</label><input id="c-coordenador" type="text"></div>
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>Periodicidade</label>
-            <select id="c-periodicidade">
-              <option value="">Selecione...</option>
-              <option>MENSAL</option><option>BIMESTRAL</option>
-              <option>TRIMESTRAL</option><option>SEMESTRAL</option><option>ANUAL</option>
-            </select>
-          </div>
-          <div class="form-group"><label>Tipo de Manutenção</label><input id="c-tipo" type="text"></div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-outline" onclick="fecharModal()">Cancelar</button>
-        <button class="btn btn-accent" onclick="salvarCliente()">Salvar</button>
-      </div>
-    </div>
-  </div>
-
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <script src="/maneng-bi/js/config.js"></script>
   <script src="/maneng-bi/js/auth.js"></script>
-  <script src="/maneng-bi/js/utils.js"></script>
   <script>
-    let todosClientes = [], filtrados = [], editandoId = null;
-    let pagina = 1; const POR_PAG = 50;
-
-    requireAuth(async () => {
+    let todos=[], filtrados=[], pg=1; const PP=50;
+    requireAuth(async()=>{
       renderMenu("clientes");
-      await carregar();
+      try{
+        const raw=await carregarDados();
+        const v=new Set();
+        todos=raw.filter(o=>{
+          const k=`${o.sigla}|${o.cliente}`;
+          if(v.has(k))return false;
+          v.add(k);return true;
+        }).sort((a,b)=>(a.sigla||"").localeCompare(b.sigla||""));
+        popularSelect("f-sigla", todos,"sigla",     "Todas");
+        popularSelect("f-sup",   todos,"supervisao","Todos");
+        popularSelect("f-estado",todos,"estado",    "Todos");
+        document.getElementById("loading").style.display="none";
+        filtrar();
+      }catch(e){document.getElementById("loading").innerHTML=`<span style="color:#C00000">${e.message}</span>`;}
     });
-
-    async function carregar() {
-      const snap = await db.collection("clientes").orderBy("sigla").get();
-      // Se não há clientes no Firestore, usa dados únicos das OS
-      if (snap.empty) {
-        const snapOS = await db.collection("ordens_servico").get();
-        const vistos = new Set();
-        todosClientes = [];
-        snapOS.forEach(d => {
-          const o = d.data();
-          const chave = `${o.sigla}|${o.cliente}`;
-          if (!vistos.has(chave)) {
-            vistos.add(chave);
-            todosClientes.push({ id: chave, sigla: o.sigla, cliente: o.cliente, estado: o.estado, supervisao: o.supervisao, pcm: o.pcm, coordenador: o.coordenador, periodicidade: o.periodicidade || "", tipoManutencao: o.tipoManutencao || "", fromOS: true });
-          }
-        });
-      } else {
-        todosClientes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      }
-      todosClientes.sort((a,b) => (a.sigla||"").localeCompare(b.sigla||""));
-      popularSelect("f-sigla",  todosClientes, "sigla",      "Todas");
-      popularSelect("f-sup",    todosClientes, "supervisao", "Todos");
-      popularSelect("f-estado", todosClientes, "estado",     "Todos");
-      filtrar();
-    }
-
-    function filtrar() {
-      const busca  = document.getElementById("f-busca").value.toLowerCase();
-      const sigla  = document.getElementById("f-sigla").value;
-      const sup    = document.getElementById("f-sup").value;
-      const estado = document.getElementById("f-estado").value;
-      filtrados = todosClientes.filter(c => {
-        if (sigla  && c.sigla      !== sigla)  return false;
-        if (sup    && c.supervisao !== sup)    return false;
-        if (estado && c.estado     !== estado) return false;
-        if (busca && !`${c.sigla} ${c.cliente}`.toLowerCase().includes(busca)) return false;
+    function filtrar(){
+      const b=document.getElementById("f-busca").value.toLowerCase(),
+            s=document.getElementById("f-sigla").value,
+            sup=document.getElementById("f-sup").value,
+            est=document.getElementById("f-estado").value;
+      filtrados=todos.filter(o=>{
+        if(s  &&o.sigla     !==s)  return false;
+        if(sup&&o.supervisao!==sup)return false;
+        if(est&&o.estado    !==est)return false;
+        if(b&&!`${o.sigla} ${o.cliente}`.toLowerCase().includes(b))return false;
         return true;
       });
-      pagina = 1;
-      renderTabela();
+      pg=1;renderT();
     }
-
-    function renderTabela() {
-      const inicio = (pagina - 1) * POR_PAG;
-      const pag = filtrados.slice(inicio, inicio + POR_PAG);
-      document.getElementById("contador").textContent = `(${filtrados.length})`;
-      const tbody = document.getElementById("tabela-clientes");
-      tbody.innerHTML = pag.length ? pag.map(c => `
+    function renderT(){
+      const ini=(pg-1)*PP,p=filtrados.slice(ini,ini+PP);
+      document.getElementById("contador").textContent=`(${filtrados.length})`;
+      document.getElementById("tbody").innerHTML=p.length?p.map(o=>`
         <tr>
-          <td><strong>${c.sigla||"—"}</strong></td>
-          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.cliente||"—"}</td>
-          <td>${c.estado||"—"}</td>
-          <td>${c.supervisao||"—"}</td>
-          <td>${c.pcm||"—"}</td>
-          <td>${c.coordenador||"—"}</td>
-          <td>${c.periodicidade||"—"}</td>
-          <td><button class="btn btn-outline btn-xs" onclick="editarCliente('${c.id}')">✏ Editar</button></td>
+          <td><strong>${o.sigla||"—"}</strong></td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.cliente||"—"}</td>
+          <td>${o.estado||"—"}</td>
+          <td>${o.supervisao||"—"}</td>
+          <td>${o.pcm||"—"}</td>
+          <td>${o.coordenador||"—"}</td>
+          <td>${o.periodicidade||"—"}</td>
         </tr>`).join("")
-        : `<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">🏪</div><p>Nenhum cliente encontrado</p></div></td></tr>`;
-      renderPag(filtrados.length);
+        :`<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">🏪</div><p>Nenhum cliente encontrado</p></div></td></tr>`;
+      const tp=Math.ceil(filtrados.length/PP);
+      if(tp<=1){document.getElementById("pag").innerHTML="";return;}
+      let h="";for(let i=1;i<=tp;i++)if(i===1||i===tp||Math.abs(i-pg)<=2)h+=`<button class="page-btn ${i===pg?"active":""}" onclick="irP(${i})">${i}</button>`;
+      document.getElementById("pag").innerHTML=h;
     }
-
-    function renderPag(total) {
-      const tp = Math.ceil(total / POR_PAG);
-      if (tp <= 1) { document.getElementById("pagination").innerHTML=""; return; }
-      let h = "";
-      for (let i = 1; i <= tp; i++) {
-        if (i===1||i===tp||Math.abs(i-pagina)<=2)
-          h += `<button class="page-btn ${i===pagina?'active':''}" onclick="irPag(${i})">${i}</button>`;
-        else if (Math.abs(i-pagina)===3) h += "<span>…</span>";
-      }
-      document.getElementById("pagination").innerHTML = h;
-    }
-    function irPag(n) { pagina = n; renderTabela(); }
-
-    function abrirNovoCliente() {
-      editandoId = null;
-      document.getElementById("modal-titulo").textContent = "Novo Cliente";
-      ["c-sigla","c-cliente","c-estado","c-supervisor","c-pcm","c-coordenador","c-tipo"].forEach(id => document.getElementById(id).value="");
-      document.getElementById("c-periodicidade").value = "";
-      document.getElementById("modal-cliente").style.display = "flex";
-    }
-
-    function editarCliente(id) {
-      const c = todosClientes.find(x => x.id === id);
-      if (!c) return;
-      editandoId = id;
-      document.getElementById("modal-titulo").textContent = "Editar Cliente";
-      document.getElementById("c-sigla").value         = c.sigla||"";
-      document.getElementById("c-cliente").value       = c.cliente||"";
-      document.getElementById("c-estado").value        = c.estado||"";
-      document.getElementById("c-supervisor").value    = c.supervisao||"";
-      document.getElementById("c-pcm").value           = c.pcm||"";
-      document.getElementById("c-coordenador").value   = c.coordenador||"";
-      document.getElementById("c-periodicidade").value = c.periodicidade||"";
-      document.getElementById("c-tipo").value          = c.tipoManutencao||"";
-      document.getElementById("modal-cliente").style.display = "flex";
-    }
-
-    async function salvarCliente() {
-      const dados = {
-        sigla:          document.getElementById("c-sigla").value.trim().toUpperCase(),
-        cliente:        document.getElementById("c-cliente").value.trim(),
-        estado:         document.getElementById("c-estado").value.trim().toUpperCase(),
-        supervisao:     document.getElementById("c-supervisor").value.trim(),
-        pcm:            document.getElementById("c-pcm").value.trim(),
-        coordenador:    document.getElementById("c-coordenador").value.trim(),
-        periodicidade:  document.getElementById("c-periodicidade").value,
-        tipoManutencao: document.getElementById("c-tipo").value.trim(),
-        syncPendente:   true,
-        atualizadoEm:   firebase.firestore.FieldValue.serverTimestamp()
-      };
-      if (!dados.sigla || !dados.cliente) { toast("Bandeira e Unidade são obrigatórios.", "erro"); return; }
-      if (editandoId && !editandoId.includes("|")) {
-        const ant = todosClientes.find(c => c.id === editandoId);
-        await db.collection("clientes").doc(editandoId).update(dados);
-        await registrarLog("clientes", editandoId, "cadastro", JSON.stringify(ant), JSON.stringify(dados));
-      } else {
-        const ref = await db.collection("clientes").add(dados);
-        await registrarLog("clientes", ref.id, "cadastro", "", JSON.stringify(dados));
-      }
-      toast("Cliente salvo!");
-      fecharModal();
-      await carregar();
-    }
-
-    function fecharModal() {
-      document.getElementById("modal-cliente").style.display = "none";
-      editandoId = null;
-    }
-
-    function exportarClientes() {
-      const dados = filtrados.map(c => ({
-        Bandeira: c.sigla, Unidade: c.cliente, Estado: c.estado,
-        Supervisor: c.supervisao, PCM: c.pcm, Coordenador: c.coordenador,
-        Periodicidade: c.periodicidade, TipoManutencao: c.tipoManutencao
-      }));
-      exportarExcel(dados, "clientes");
-    }
+    function irP(n){pg=n;renderT();}
+    function exportar(){exportarExcel(filtrados.map(o=>({Bandeira:o.sigla,Unidade:o.cliente,Estado:o.estado,Supervisor:o.supervisao,PCM:o.pcm,Coordenador:o.coordenador,Periodicidade:o.periodicidade})),"clientes");}
   </script>
 </body>
 </html>
