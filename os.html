@@ -7,11 +7,7 @@
   <link rel="stylesheet" href="/maneng-bi/css/main.css">
 </head>
 <body>
-  <aside class="sidebar">
-    <div class="sidebar-logo"><span>man<span class="accent">eng</span></span></div>
-    <div id="sidebar"></div>
-  </aside>
-
+  <aside class="sidebar"><div class="sidebar-logo"><span>man<span class="accent">eng</span></span></div><div id="sidebar"></div></aside>
   <div class="main">
     <div class="topbar">
       <div class="topbar-title">Ordens de Serviço</div>
@@ -19,248 +15,84 @@
         <button class="btn btn-outline btn-sm" onclick="exportarOS()" style="color:#fff;border-color:rgba(255,255,255,.3)">⬇ Excel</button>
       </div>
     </div>
-
     <div class="content">
       <div class="filters-bar">
-        <div class="filter-group"><label>Supervisor</label><select id="f-sup"></select></div>
-        <div class="filter-group"><label>Coordenador</label><select id="f-coord"></select></div>
-        <div class="filter-group"><label>Mês</label><select id="f-mes"></select></div>
-        <div class="filter-group"><label>Ano</label><select id="f-ano"></select></div>
-        <div class="filter-group"><label>Bandeira</label><select id="f-sigla"></select></div>
-        <div class="filter-group"><label>Status</label><select id="f-status"></select></div>
-        <div class="filter-group"><label>Estado</label><select id="f-estado"></select></div>
-        <div class="filter-group" style="justify-content:flex-end">
-          <button class="btn btn-accent btn-sm" onclick="aplicarFiltros()">🔍 Filtrar</button>
-        </div>
+        <div class="filter-group"><label>Supervisor</label><select id="f-sup" onchange="filtrar()"></select></div>
+        <div class="filter-group"><label>Coordenador</label><select id="f-coord" onchange="filtrar()"></select></div>
+        <div class="filter-group"><label>Mês</label><select id="f-mes" onchange="filtrar()"></select></div>
+        <div class="filter-group"><label>Bandeira</label><select id="f-sigla" onchange="filtrar()"></select></div>
+        <div class="filter-group"><label>Status</label><select id="f-status" onchange="filtrar()"></select></div>
+        <div class="filter-group"><label>Estado</label><select id="f-estado" onchange="filtrar()"></select></div>
       </div>
-
       <div class="table-card">
-        <div class="table-header">
-          <h3>Ordens de Serviço <span id="contador" style="color:#718096;font-weight:400;font-size:.85rem"></span></h3>
-        </div>
-        <div style="overflow-x:auto">
+        <div class="table-header"><h3>Ordens de Serviço <span id="contador" style="color:#718096;font-size:.85rem;font-weight:400"></span></h3></div>
+        <div id="loading" class="loading"><div class="spinner"></div> Carregando...</div>
+        <div style="overflow-x:auto" id="twrap">
           <table>
-            <thead>
-              <tr>
-                <th>Bandeira</th><th>Unidade</th><th>Supervisor</th>
-                <th>PCM</th><th>Mês</th><th>Status</th>
-                <th>Início</th><th>Término</th><th>Periodicidade</th><th>Ações</th>
-              </tr>
-            </thead>
-            <tbody id="tabela-os"></tbody>
+            <thead><tr><th>Bandeira</th><th>Unidade</th><th>Supervisor</th><th>PCM</th><th>Mês</th><th>Status</th><th>Início</th><th>Término</th><th>Periodicidade</th></tr></thead>
+            <tbody id="tbody"></tbody>
           </table>
         </div>
-        <div class="pagination" id="pagination"></div>
+        <div class="pagination" id="pag"></div>
       </div>
     </div>
   </div>
-
-  <!-- Modal alteração de status -->
-  <div id="modal-status" class="modal-overlay" style="display:none">
-    <div class="modal">
-      <div class="modal-header">
-        <h3>Alterar Status</h3>
-        <button class="modal-close" onclick="fecharModal()">✕</button>
-      </div>
-      <div class="modal-body">
-        <p style="margin-bottom:12px">OS: <strong id="modal-os-nome"></strong></p>
-        <p style="margin-bottom:8px">Status atual: <span id="modal-status-atual"></span></p>
-        <div class="form-group">
-          <label>Novo status</label>
-          <select id="modal-novo-status"></select>
-        </div>
-        <div class="form-group">
-          <label>Observação (opcional)</label>
-          <textarea id="modal-obs" rows="3" placeholder="Descreva o motivo da alteração..."></textarea>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-outline" onclick="fecharModal()">Cancelar</button>
-        <button class="btn btn-accent" onclick="confirmarStatus()">Confirmar</button>
-      </div>
-    </div>
-  </div>
-
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <script src="/maneng-bi/js/config.js"></script>
   <script src="/maneng-bi/js/auth.js"></script>
-  <script src="/maneng-bi/js/utils.js"></script>
   <script>
-    let todosOS = [], filtrados = [], paginaAtual = 1;
-    const POR_PAGINA = 50;
-    let osEditando = null;
-
-    requireAuth(async () => {
+    let todos=[], filtrados=[], pg=1; const PP=50;
+    requireAuth(async()=>{
       renderMenu("os");
-      await carregarOS();
+      try{
+        todos=await carregarDados();
+        popularSelect("f-sup",   todos,"supervisao", "Todos");
+        popularSelect("f-coord", todos,"coordenador","Todos");
+        popularSelect("f-sigla", todos,"sigla",      "Todas");
+        popularSelect("f-estado",todos,"estado",     "Todos");
+        const sv=[...new Set(todos.map(o=>normalizarStatus(o.status)).filter(Boolean))].sort();
+        document.getElementById("f-status").innerHTML=`<option value="">Todos</option>`+sv.map(s=>`<option>${s}</option>`).join("");
+        const mv=[...new Set(todos.map(o=>o.mes).filter(Boolean))];
+        document.getElementById("f-mes").innerHTML=`<option value="">Todos</option>`+mv.map(m=>`<option>${m}</option>`).join("");
+        document.getElementById("loading").style.display="none";
+        filtrar();
+      }catch(e){document.getElementById("loading").innerHTML=`<span style="color:#C00000">${e.message}</span>`;}
     });
 
-    async function carregarOS() {
-      const snap = await db.collection("ordens_servico").orderBy("sigla").get();
-      todosOS = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      popularFiltros();
-      aplicarFiltros();
-    }
-
-    function popularFiltros() {
-      popularSelect("f-sup",    todosOS, "supervisao",  "Todos");
-      popularSelect("f-coord",  todosOS, "coordenador", "Todos");
-      popularSelect("f-sigla",  todosOS, "sigla",       "Todas");
-      popularSelect("f-estado", todosOS, "estado",      "Todos");
-      const statusVals = [...new Set(todosOS.map(o => o.status).filter(Boolean))].sort();
-      document.getElementById("f-status").innerHTML =
-        `<option value="">Todos</option>` + statusVals.map(s => `<option>${s}</option>`).join("");
-      const meses = [...new Set(todosOS.map(o => o.mes).filter(Boolean))];
-      document.getElementById("f-mes").innerHTML =
-        `<option value="">Todos</option>` + meses.map(m => `<option>${m}</option>`).join("");
-      const anos = [...new Set(todosOS.map(o => String(o.ano)).filter(Boolean))].sort().reverse();
-      document.getElementById("f-ano").innerHTML =
-        `<option value="">Todos</option>` + anos.map(a => `<option>${a}</option>`).join("");
-    }
-
-    function aplicarFiltros() {
-      const f = {
-        supervisor:  document.getElementById("f-sup").value,
-        coordenador: document.getElementById("f-coord").value,
-        mes:         document.getElementById("f-mes").value,
-        ano:         document.getElementById("f-ano").value,
-        sigla:       document.getElementById("f-sigla").value,
-        status:      document.getElementById("f-status").value,
-        estado:      document.getElementById("f-estado").value
-      };
-      filtrados = filtrarOS(todosOS, f);
-      paginaAtual = 1;
-      renderTabela();
-    }
-
-    function renderTabela() {
-      const inicio = (paginaAtual - 1) * POR_PAGINA;
-      const pagina = filtrados.slice(inicio, inicio + POR_PAGINA);
-      document.getElementById("contador").textContent = `(${filtrados.length} registros)`;
-      const tbody = document.getElementById("tabela-os");
-
-      if (!pagina.length) {
-        tbody.innerHTML = `<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📋</div><p>Nenhuma OS encontrada</p></div></td></tr>`;
-        document.getElementById("pagination").innerHTML = "";
-        return;
-      }
-
-      tbody.innerHTML = pagina.map(os => `
-        <tr>
-          <td><strong>${os.sigla||"—"}</strong></td>
-          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${os.cliente||""}">${os.cliente||"—"}</td>
-          <td>${os.supervisao||"—"}</td>
-          <td>${os.pcm||"—"}</td>
-          <td>${os.mes||"—"} ${os.ano||""}</td>
-          <td>${statusChip(os.status||"—")}</td>
-          <td>${fmtData(os.dataInicio)}</td>
-          <td>${fmtData(os.dataTermino)}</td>
-          <td>${os.periodicidade||"—"}</td>
-          <td>
-            <button class="btn btn-outline btn-xs" onclick="abrirModalStatus('${os.id}')">Status</button>
-            <button class="btn btn-outline btn-xs" onclick="verDetalhes('${os.id}')">Ver</button>
-          </td>
-        </tr>
-      `).join("");
-
-      renderPaginacao(filtrados.length);
-    }
-
-    function renderPaginacao(total) {
-      const totalPags = Math.ceil(total / POR_PAGINA);
-      if (totalPags <= 1) { document.getElementById("pagination").innerHTML = ""; return; }
-      let html = "";
-      const range = 2;
-      for (let i = 1; i <= totalPags; i++) {
-        if (i === 1 || i === totalPags || (i >= paginaAtual - range && i <= paginaAtual + range)) {
-          html += `<button class="page-btn ${i===paginaAtual?'active':''}" onclick="irPagina(${i})">${i}</button>`;
-        } else if (i === paginaAtual - range - 1 || i === paginaAtual + range + 1) {
-          html += `<span style="padding:0 4px">…</span>`;
-        }
-      }
-      document.getElementById("pagination").innerHTML = html;
-    }
-
-    function irPagina(n) { paginaAtual = n; renderTabela(); }
-
-    function abrirModalStatus(osId) {
-      osEditando = filtrados.find(o => o.id === osId) || todosOS.find(o => o.id === osId);
-      if (!osEditando) return;
-      document.getElementById("modal-os-nome").textContent = `${osEditando.sigla} — ${osEditando.cliente}`;
-      document.getElementById("modal-status-atual").innerHTML = statusChip(osEditando.status);
-      const transicoes = (STATUS_TRANSITIONS[osEditando.status] || []).filter(s => podeTransicionar(osEditando.status, s));
-      if (!transicoes.length) {
-        document.getElementById("modal-novo-status").innerHTML = `<option>Sem transições permitidas para seu perfil</option>`;
-      } else {
-        document.getElementById("modal-novo-status").innerHTML = transicoes.map(s =>
-          `<option value="${s}">${s}</option>`
-        ).join("");
-      }
-      document.getElementById("modal-status").style.display = "flex";
-    }
-
-    function fecharModal() {
-      document.getElementById("modal-status").style.display = "none";
-      osEditando = null;
-    }
-
-    async function confirmarStatus() {
-      if (!osEditando) return;
-      const novoStatus = document.getElementById("modal-novo-status").value;
-      const obs = document.getElementById("modal-obs").value.trim();
-      if (!novoStatus || !podeTransicionar(osEditando.status, novoStatus)) {
-        toast("Sem permissão para esta transição.", "erro"); return;
-      }
-      const statusAnterior = osEditando.status;
-      await db.collection("ordens_servico").doc(osEditando.id).update({
-        status: novoStatus,
-        statusAnterior,
-        observacao: obs || "",
-        alteradoPor: currentUserData.nome,
-        alteradoEm: firebase.firestore.FieldValue.serverTimestamp()
+    function filtrar(){
+      const sup=document.getElementById("f-sup").value,coord=document.getElementById("f-coord").value,
+            mes=document.getElementById("f-mes").value,sigla=document.getElementById("f-sigla").value,
+            status=document.getElementById("f-status").value,estado=document.getElementById("f-estado").value;
+      filtrados=todos.filter(o=>{
+        if(sup   &&o.supervisao !==sup)   return false;
+        if(coord &&o.coordenador!==coord) return false;
+        if(mes   &&(o.mes||"").toUpperCase()!==mes) return false;
+        if(sigla &&o.sigla      !==sigla) return false;
+        if(estado&&o.estado     !==estado)return false;
+        if(status&&normalizarStatus(o.status)!==status)return false;
+        return true;
       });
-      await registrarLog("ordens_servico", osEditando.id, "status", statusAnterior, novoStatus);
-      toast(`Status alterado para ${novoStatus}`, "sucesso");
-      fecharModal();
-      await carregarOS();
+      pg=1; renderT();
     }
 
-    function verDetalhes(osId) {
-      const os = filtrados.find(o => o.id === osId) || todosOS.find(o => o.id === osId);
-      if (!os) return;
-      abrirModal(`${os.sigla} — ${os.cliente}`, `
-        <table style="width:100%;font-size:.875rem">
-          <tr><td style="color:#718096;padding:4px 0;width:140px">Bandeira</td><td><strong>${os.sigla||"—"}</strong></td></tr>
-          <tr><td style="color:#718096;padding:4px 0">Unidade</td><td>${os.cliente||"—"}</td></tr>
-          <tr><td style="color:#718096;padding:4px 0">Estado</td><td>${os.estado||"—"}</td></tr>
-          <tr><td style="color:#718096;padding:4px 0">Supervisor</td><td>${os.supervisao||"—"}</td></tr>
-          <tr><td style="color:#718096;padding:4px 0">PCM</td><td>${os.pcm||"—"}</td></tr>
-          <tr><td style="color:#718096;padding:4px 0">Coordenador</td><td>${os.coordenador||"—"}</td></tr>
-          <tr><td style="color:#718096;padding:4px 0">Mês/Ano</td><td>${os.mes||"—"} / ${os.ano||"—"}</td></tr>
-          <tr><td style="color:#718096;padding:4px 0">Status</td><td>${statusChip(os.status||"—")}</td></tr>
-          <tr><td style="color:#718096;padding:4px 0">Tipo Manutenção</td><td>${os.tipoManutencao||"—"}</td></tr>
-          <tr><td style="color:#718096;padding:4px 0">Periodicidade</td><td>${os.periodicidade||"—"}</td></tr>
-          <tr><td style="color:#718096;padding:4px 0">Data Início</td><td>${fmtData(os.dataInicio)}</td></tr>
-          <tr><td style="color:#718096;padding:4px 0">Data Término</td><td>${fmtData(os.dataTermino)}</td></tr>
-          <tr><td style="color:#718096;padding:4px 0">Última alteração</td><td>${fmtDateTime(os.alteradoEm)}</td></tr>
-          ${os.observacao?`<tr><td style="color:#718096;padding:4px 0">Observação</td><td>${os.observacao}</td></tr>`:""}
-        </table>
-      `, [{ label: "Fechar", classe: "btn-outline", acao: "this.closest('.modal-overlay').remove()" }]);
-    }
-
-    function exportarOS() {
-      const dados = filtrados.map(os => ({
-        Bandeira: os.sigla, Unidade: os.cliente, Supervisor: os.supervisao,
-        PCM: os.pcm, Coordenador: os.coordenador, Estado: os.estado,
-        Mês: os.mes, Ano: os.ano, Status: os.status,
-        TipoManutencao: os.tipoManutencao, Periodicidade: os.periodicidade,
-        DataInicio: fmtData(os.dataInicio), DataTermino: fmtData(os.dataTermino)
-      }));
-      exportarExcel(dados, "ordens_servico");
-    }
-  </script>
-</body>
-</html>
+    function renderT(){
+      const ini=(pg-1)*PP, p=filtrados.slice(ini,ini+PP);
+      document.getElementById("contador").textContent=`(${filtrados.length})`;
+      document.getElementById("tbody").innerHTML=p.length?p.map(o=>`
+        <tr>
+          <td><strong>${o.sigla||"—"}</strong></td>
+          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.cliente||"—"}</td>
+          <td>${o.supervisao||"—"}</td>
+          <td>${o.pcm||"—"}</td>
+          <td>${o.mes||"—"} ${o.ano||""}</td>
+          <td>${statusChip(o.status)}</td>
+          <td>${o.dataInicio||"—"}</td>
+          <td>${o.dataTermino||"—"}</td>
+          <td>${o.periodicidade||"—"}</td>
+        </tr>`).join("")
+        :`<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📋</div><p>Nenhuma OS encontrada</p></div></td></tr>`;
+      const tp=Math.ceil(filtrados.length/PP);
+      if(tp<=1){document.getElementById("pag").innerHTML="";return;}
+      let h="";for(let i=1;i<=tp;i++)if(i===1||i==
