@@ -36,7 +36,7 @@
               <span style="font-size:.75rem;color:#718096">100,00%</span>
             </div>
             <div style="display:flex;gap:16px;justify-content:center;margin-top:8px;font-size:.75rem">
-              <span><span style="display:inline-block;width:12px;height:12px;background:#00B050;border-radius:2px;margin-right:4px"></span>Realizado</span>
+              <span><span style="display:inline-block;width:12px;height:12px;background:#1a2a4a;border-radius:2px;margin-right:4px"></span>Realizado</span>
               <span><span style="display:inline-block;width:12px;height:3px;background:#C00000;margin-right:4px;vertical-align:middle"></span>Meta do dia</span>
             </div>
           </div>
@@ -67,57 +67,94 @@
   <script src="/maneng-bi/js/auth.js"></script>
   <script>
     let dados=[], cP, cS;
-    const EXCECOES  = ["DISTRATO DE CONTRATO","DISTRATO","LOJA FECHADA","LOJA EM REFORMA","NÃO POSSUI GALERIA NESTA LOJA","RESIDENTE","CANCELADO"];
-    const REALIZADAS= ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA","CONFORME CRONOGRAMA","EM EXECUÇÃO","EM EXECUCAO"];
-    const PRIO      = ["FATURADA","AUDITADA","VALIDADA","CONCLUIDA","CONFORME CRONOGRAMA","EM EXECUÇÃO","EM ATRASO","SEM EQUIPE","PROGRAMADO","PROGRAMADA","DISTRATO DE CONTRATO","DISTRATO","LOJA FECHADA","LOJA EM REFORMA","NÃO POSSUI GALERIA NESTA LOJA","RESIDENTE","CANCELADO"];
+
+    // Excluídos da base de cálculo (não executados no mês)
+    const EXCECOES = [
+      "DISTRATO DE CONTRATO","DISTRATO","LOJA FECHADA","LOJA EM REFORMA",
+      "NÃO POSSUI GALERIA NESTA LOJA","RESIDENTE","CANCELADO",
+      "CONFORME CRONOGRAMA"  // periodicidade não cai neste mês → não conta
+    ];
+
+    // Conta como realizada para a taxa
+    const REALIZADAS = ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA","EM EXECUÇÃO","EM EXECUCAO"];
+
+    const PRIO = [
+      "FATURADA","AUDITADA","VALIDADA","CONCLUIDA","EM EXECUÇÃO","EM ATRASO","SEM EQUIPE",
+      "PROGRAMADO","PROGRAMADA","CONFORME CRONOGRAMA","DISTRATO DE CONTRATO","DISTRATO",
+      "LOJA FECHADA","LOJA EM REFORMA","NÃO POSSUI GALERIA NESTA LOJA","RESIDENTE","CANCELADO"
+    ];
+
+    // Feriados nacionais Brasil 2025-2027
+    const FERIADOS = new Set([
+      "2025-01-01","2025-03-03","2025-03-04","2025-04-18","2025-04-21","2025-05-01",
+      "2025-06-19","2025-09-07","2025-10-12","2025-11-02","2025-11-15","2025-11-20","2025-12-25",
+      "2026-01-01","2026-02-16","2026-02-17","2026-04-03","2026-04-21","2026-05-01",
+      "2026-06-04","2026-09-07","2026-10-12","2026-11-02","2026-11-15","2026-11-20","2026-12-25",
+      "2027-01-01","2027-02-15","2027-02-16","2027-04-02","2027-04-21","2027-05-01",
+      "2027-05-27","2027-09-07","2027-10-12","2027-11-02","2027-11-15","2027-11-20","2027-12-25"
+    ]);
+
+    function isDiaUtil(ano, mes, dia) {
+      const dt = new Date(ano, mes, dia);
+      const dow = dt.getDay();
+      if(dow===0||dow===6) return false;
+      const key = `${ano}-${String(mes+1).padStart(2,"0")}-${String(dia).padStart(2,"0")}`;
+      return !FERIADOS.has(key);
+    }
 
     function diasUteis(ano, mesIdx, ate) {
-      const fim=ate||new Date(ano,mesIdx+1,0).getDate();
-      let c=0;for(let d=1;d<=fim;d++){const dow=new Date(ano,mesIdx,d).getDay();if(dow!==0&&dow!==6)c++;}return c;
+      const fim = ate || new Date(ano, mesIdx+1, 0).getDate();
+      let c=0;
+      for(let d=1;d<=fim;d++) if(isDiaUtil(ano,mesIdx,d)) c++;
+      return c;
     }
 
     function calcularMeta(mes, anoStr) {
-      const mesIdx=MESES.indexOf(mes);if(mesIdx<0)return{meta:100,totalUteis:0,hojeUteis:0};
-      const ano=parseInt(anoStr),hoje=new Date(),totalUteis=diasUteis(ano,mesIdx);
+      const mesIdx=MESES.indexOf(mes);
+      if(mesIdx<0) return {meta:100,totalUteis:0,hojeUteis:0};
+      const ano=parseInt(anoStr), hoje=new Date();
+      const totalUteis=diasUteis(ano,mesIdx);
       let hojeUteis;
-      if(hoje.getFullYear()===ano&&hoje.getMonth()===mesIdx) hojeUteis=diasUteis(ano,mesIdx,hoje.getDate());
+      if(hoje.getFullYear()===ano && hoje.getMonth()===mesIdx)
+        hojeUteis=diasUteis(ano,mesIdx,hoje.getDate());
       else if(new Date(ano,mesIdx+1,1)<=hoje) hojeUteis=totalUteis;
       else hojeUteis=0;
-      return{meta:totalUteis>0?(hojeUteis/totalUteis)*100:0,totalUteis,hojeUteis};
+      return {meta:totalUteis>0?(hojeUteis/totalUteis)*100:0, totalUteis, hojeUteis};
     }
 
     function deduplicar(lista) {
       const por={};
       lista.forEach(os=>{
-        const k=`${os.sigla}|${os.cliente}`,st=normalizarStatus(os.status);
+        const k=`${os.sigla}|${os.cliente}`, st=normalizarStatus(os.status);
         if(!por[k]){por[k]=st;return;}
-        const ai=PRIO.indexOf(por[k]),bi=PRIO.indexOf(st);if(bi<ai)por[k]=st;
+        const ai=PRIO.indexOf(por[k]),bi=PRIO.indexOf(st);
+        if(bi<ai) por[k]=st;
       });
       return Object.values(por);
     }
 
     function calcularIndicadoresUnidades(lista) {
-      const base=deduplicar(lista).filter(s=>!EXCECOES.includes(s));
-      const total=base.length;
-      return{
-        total,
-        concluidas: base.filter(s=>REALIZADAS.includes(s)).length,
-        emAtraso:   base.filter(s=>s==="EM ATRASO").length,
-        emExecucao: base.filter(s=>["EM EXECUÇÃO","EM EXECUCAO"].includes(s)).length,
-        programadas:base.filter(s=>["PROGRAMADO","PROGRAMADA"].includes(s)).length,
-        semEquipe:  base.filter(s=>s==="SEM EQUIPE").length,
-        taxa:       total>0?(base.filter(s=>REALIZADAS.includes(s)).length/total)*100:0
-      };
+      const sts  = deduplicar(lista);
+      const base = sts.filter(s=>!EXCECOES.includes(s));
+      const total      = base.length;
+      const concluidas = base.filter(s=>REALIZADAS.includes(s)).length;
+      const emAtraso   = base.filter(s=>s==="EM ATRASO").length;
+      const emExecucao = base.filter(s=>["EM EXECUÇÃO","EM EXECUCAO"].includes(s)).length;
+      const programadas= base.filter(s=>["PROGRAMADO","PROGRAMADA"].includes(s)).length;
+      const semEquipe  = base.filter(s=>s==="SEM EQUIPE").length;
+      return {total, concluidas, emAtraso, emExecucao, programadas, semEquipe,
+              taxa: total>0?(concluidas/total)*100:0};
     }
 
     function porSupervisorUnidades(lista) {
       const porSup={};
       lista.forEach(os=>{
-        const sup=os.supervisao||"Sem Supervisor",k=`${os.sigla}|${os.cliente}`;
+        const sup=os.supervisao||"Sem Supervisor", k=`${os.sigla}|${os.cliente}`;
         if(!porSup[sup])porSup[sup]={supervisao:sup,unidades:{}};
         const st=normalizarStatus(os.status);
         if(!porSup[sup].unidades[k]){porSup[sup].unidades[k]=st;return;}
-        const ai=PRIO.indexOf(porSup[sup].unidades[k]),bi=PRIO.indexOf(st);if(bi<ai)porSup[sup].unidades[k]=st;
+        const ai=PRIO.indexOf(porSup[sup].unidades[k]),bi=PRIO.indexOf(st);
+        if(bi<ai)porSup[sup].unidades[k]=st;
       });
       return Object.values(porSup).map(s=>{
         const base=Object.values(s.unidades).filter(x=>!EXCECOES.includes(x));
@@ -131,15 +168,25 @@
     }
 
     function desenharGauge(canvas, taxa, meta) {
-      canvas.width=canvas.offsetWidth||400;canvas.height=180;
-      const ctx=canvas.getContext("2d"),W=canvas.width,H=canvas.height,cx=W/2,cy=H*0.95,r=Math.min(W*0.42,H*0.82);
+      canvas.width=canvas.offsetWidth||400; canvas.height=180;
+      const ctx=canvas.getContext("2d"),W=canvas.width,H=canvas.height;
+      const cx=W/2,cy=H*0.95,r=Math.min(W*0.42,H*0.82);
       ctx.clearRect(0,0,W,H);
-      ctx.beginPath();ctx.arc(cx,cy,r,Math.PI,0);ctx.strokeStyle="#e2e8f0";ctx.lineWidth=24;ctx.stroke();
-      if(taxa>0){const ang=Math.PI+(taxa/100)*Math.PI;ctx.beginPath();ctx.arc(cx,cy,r,Math.PI,ang);ctx.strokeStyle="#00B050";ctx.lineWidth=24;ctx.lineCap="butt";ctx.stroke();}
+      // Fundo
+      ctx.beginPath();ctx.arc(cx,cy,r,Math.PI,0);ctx.strokeStyle="#e2e8f0";ctx.lineWidth=26;ctx.stroke();
+      // Realizado (azul escuro — igual ao BI original)
+      if(taxa>0){
+        const ang=Math.PI+(taxa/100)*Math.PI;
+        ctx.beginPath();ctx.arc(cx,cy,r,Math.PI,ang);
+        ctx.strokeStyle="#1a2a4a";ctx.lineWidth=26;ctx.lineCap="butt";ctx.stroke();
+      }
+      // Linha vermelha meta
       if(meta>0&&meta<=100){
         const angM=Math.PI+(meta/100)*Math.PI;
-        const x1=cx+(r-20)*Math.cos(angM),y1=cy+(r-20)*Math.sin(angM),x2=cx+(r+20)*Math.cos(angM),y2=cy+(r+20)*Math.sin(angM);
-        ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.strokeStyle="#C00000";ctx.lineWidth=3;ctx.lineCap="round";ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(cx+(r-22)*Math.cos(angM),cy+(r-22)*Math.sin(angM));
+        ctx.lineTo(cx+(r+22)*Math.cos(angM),cy+(r+22)*Math.sin(angM));
+        ctx.strokeStyle="#C00000";ctx.lineWidth=3;ctx.lineCap="round";ctx.stroke();
       }
     }
 
@@ -147,77 +194,38 @@
       renderMenu("dashboard");
       const am=new Date().getFullYear(),mm=MESES[new Date().getMonth()];
       document.getElementById("f-mes").innerHTML=`<option value="">Todos os meses</option>`+MESES.map(m=>`<option value="${m}"${m===mm?" selected":""}>${m}</option>`).join("");
-      let ao=`<option value="">Todos os anos</option>`;for(let a=am-1;a<=am+1;a++)ao+=`<option value="${a}"${a===am?" selected":""}>${a}</option>`;
+      let ao=`<option value="">Todos os anos</option>`;
+      for(let a=am-1;a<=am+1;a++) ao+=`<option value="${a}"${a===am?" selected":""}>${a}</option>`;
       document.getElementById("f-ano").innerHTML=ao;
       try{
         dados=await carregarDados();
-        popularSelect("f-supervisor",dados,"supervisao","Todos supervisores");
+        popularSelect("f-supervisor", dados,"supervisao", "Todos supervisores");
         popularSelect("f-coordenador",dados,"coordenador","Todos coordenadores");
-        popularSelect("f-estado",dados,"estado","Todos os estados");
+        popularSelect("f-estado",     dados,"estado",     "Todos os estados");
         document.getElementById("loading").style.display="none";
         document.getElementById("dash").style.display="block";
         renderD();
-        ["f-mes","f-ano","f-supervisor","f-coordenador","f-estado"].forEach(id=>document.getElementById(id).addEventListener("change",renderD));
-      }catch(e){document.getElementById("loading").innerHTML=`<span style="color:#C00000">Erro: ${e.message}</span>`;}
+        ["f-mes","f-ano","f-supervisor","f-coordenador","f-estado"].forEach(id=>
+          document.getElementById(id).addEventListener("change",renderD));
+      }catch(e){
+        document.getElementById("loading").innerHTML=`<span style="color:#C00000">Erro: ${e.message}</span>`;
+      }
     });
 
     function renderD(){
-      const mes=document.getElementById("f-mes").value,ano=document.getElementById("f-ano").value,
-            sup=document.getElementById("f-supervisor").value,coord=document.getElementById("f-coordenador").value,
+      const mes=document.getElementById("f-mes").value,
+            ano=document.getElementById("f-ano").value,
+            sup=document.getElementById("f-supervisor").value,
+            coord=document.getElementById("f-coordenador").value,
             est=document.getElementById("f-estado").value;
       const lista=dados.filter(o=>{
-        if(mes&&(o.mes||"").toUpperCase()!==mes)return false;
-        if(ano&&String(o.ano)!==String(ano))return false;
-        if(sup&&o.supervisao!==sup)return false;
-        if(coord&&o.coordenador!==coord)return false;
-        if(est&&o.estado!==est)return false;
+        if(mes  &&(o.mes||"").toUpperCase()!==mes) return false;
+        if(ano  &&String(o.ano)!==String(ano))     return false;
+        if(sup  &&o.supervisao !==sup)             return false;
+        if(coord&&o.coordenador!==coord)           return false;
+        if(est  &&o.estado     !==est)             return false;
         return true;
       });
+
       const ind=calcularIndicadoresUnidades(lista);
-      const{meta,totalUteis,hojeUteis}=(mes&&ano)?calcularMeta(mes,ano):{meta:100,totalUteis:0,hojeUteis:0};
-      const tf=ind.taxa.toFixed(2).replace(".",","),mf=meta.toFixed(2).replace(".",",");
-
-      document.getElementById("kpi-grid").innerHTML=`
-        <div class="kpi-card"><div class="kpi-icon">📋</div><div class="kpi-info"><div class="kpi-label">Programadas</div><div class="kpi-value">${ind.programadas}</div></div></div>
-        <div class="kpi-card success-card"><div class="kpi-icon">✅</div><div class="kpi-info"><div class="kpi-label">Realizadas (Exec+Conc)</div><div class="kpi-value">${ind.concluidas}</div></div></div>
-        <div class="kpi-card warning-card"><div class="kpi-icon">🔧</div><div class="kpi-info"><div class="kpi-label">Em Execução</div><div class="kpi-value">${ind.emExecucao}</div></div></div>
-        <div class="kpi-card danger-card"><div class="kpi-icon">⏰</div><div class="kpi-info"><div class="kpi-label">Em Atraso</div><div class="kpi-value">${ind.emAtraso}</div></div></div>
-        <div class="kpi-card"><div class="kpi-icon">👥</div><div class="kpi-info"><div class="kpi-label">Sem Equipe</div><div class="kpi-value">${ind.semEquipe}</div></div></div>
-        <div class="kpi-card accent-card"><div class="kpi-icon">🚨</div><div class="kpi-info"><div class="kpi-label">Total Unidades</div><div class="kpi-value large">${ind.total}</div></div></div>
-        <div class="kpi-card warning-card"><div class="kpi-icon">🎯</div><div class="kpi-info"><div class="kpi-label">Meta (dia ${hojeUteis}/${totalUteis} úteis)</div><div class="kpi-value">${mf}%</div></div></div>
-        <div class="kpi-card success-card"><div class="kpi-icon">📈</div><div class="kpi-info"><div class="kpi-label">Taxa de Conclusão</div><div class="kpi-value">${tf}%</div></div></div>`;
-
-      setTimeout(()=>{desenharGauge(document.getElementById("chart-gauge"),ind.taxa,meta);
-        document.getElementById("gauge-val").textContent=tf+"%";
-        document.getElementById("meta-val").textContent="▼ Meta do dia: "+mf+"%";},50);
-
-      const sts=deduplicar(lista),sc={};sts.forEach(s=>{sc[s]=(sc[s]||0)+1;});const sl=Object.keys(sc);
-      if(cP)cP.destroy();
-      cP=new Chart(document.getElementById("chart-pizza").getContext("2d"),{type:"pie",data:{labels:sl,datasets:[{data:sl.map(s=>sc[s]),backgroundColor:sl.map(s=>(STATUS_CONFIG[s]||{cor:"#999"}).cor),borderWidth:1}]},options:{responsive:true,plugins:{legend:{position:"right",labels:{boxWidth:12,font:{size:10}}}}}});
-
-      const ps=porSupervisorUnidades(lista);
-      if(cS)cS.destroy();
-      const cv=document.getElementById("chart-sup");cv.height=Math.max(200,ps.length*30);
-      cS=new Chart(cv.getContext("2d"),{type:"bar",data:{labels:ps.map(s=>s.supervisao),datasets:[
-        {label:"Programadas",data:ps.map(s=>s.programadas),backgroundColor:"#4DA6FF"},
-        {label:"Realizadas", data:ps.map(s=>s.concluidas), backgroundColor:"#00B050"},
-        {label:"Em Execução",data:ps.map(s=>s.emExecucao), backgroundColor:"#FF9900"},
-        {label:"Em Atraso",  data:ps.map(s=>s.emAtraso),   backgroundColor:"#C00000"},
-        {label:"Sem Equipe", data:ps.map(s=>s.semEquipe),  backgroundColor:"#843C0C"}
-      ]},options:{indexAxis:"y",responsive:true,plugins:{legend:{position:"top",labels:{boxWidth:12,font:{size:10}}}},scales:{x:{stacked:false},y:{ticks:{font:{size:10}}}}}});
-
-      document.getElementById("tbody-sup").innerHTML=ps.length?ps.map(s=>{
-        const tot=s.programadas+s.concluidas+s.emExecucao+s.emAtraso+s.semEquipe;
-        const tx=tot>0?((s.concluidas/tot)*100).toFixed(1):0;
-        return`<tr><td><strong>${s.supervisao}</strong></td><td style="color:#4DA6FF;font-weight:600">${s.programadas}</td><td style="color:#00B050;font-weight:600">${s.concluidas}</td><td style="color:#FF9900;font-weight:600">${s.emExecucao}</td><td style="color:#C00000;font-weight:600">${s.emAtraso}</td><td style="color:#843C0C;font-weight:600">${s.semEquipe}</td><td><strong>${tx}%</strong></td></tr>`;
-      }).join(""):`<tr><td colspan="7"><div class="empty-state"><p>Nenhum dado</p></div></td></tr>`;
-    }
-
-    function exportarResumo(){
-      const mes=document.getElementById("f-mes").value,ano=document.getElementById("f-ano").value;
-      const lista=dados.filter(o=>{if(mes&&(o.mes||"").toUpperCase()!==mes)return false;if(ano&&String(o.ano)!==String(ano))return false;return true;});
-      exportarExcel(porSupervisorUnidades(lista).map(s=>({Supervisor:s.supervisao,Programadas:s.programadas,Realizadas:s.concluidas,EmExecução:s.emExecucao,EmAtraso:s.emAtraso,SemEquipe:s.semEquipe})),"resumo_supervisores");
-    }
-  </script>
-</body>
-</html>
+      const {meta,totalUteis,hojeUteis}=(mes&&ano)?calcularMeta(mes,ano):{meta:1
