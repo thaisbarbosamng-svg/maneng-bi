@@ -228,4 +228,90 @@
       });
 
       const ind=calcularIndicadoresUnidades(lista);
-      const {meta,totalUteis,hojeUteis}=(mes&&ano)?calcularMeta(mes,ano):{meta:1
+      const {meta,totalUteis,hojeUteis}=(mes&&ano)?calcularMeta(mes,ano):{meta:100,totalUteis:0,hojeUteis:0};
+      const tf=ind.taxa.toFixed(2).replace(".",","), mf=meta.toFixed(2).replace(".",",");
+
+      document.getElementById("kpi-grid").innerHTML=`
+        <div class="kpi-card"><div class="kpi-icon">📋</div>
+          <div class="kpi-info"><div class="kpi-label">OS Programada</div><div class="kpi-value">${ind.programadas}</div></div></div>
+        <div class="kpi-card success-card"><div class="kpi-icon">✅</div>
+          <div class="kpi-info"><div class="kpi-label">OS Concluída</div><div class="kpi-value">${ind.concluidas - ind.emExecucao < 0 ? ind.concluidas : ind.concluidas - ind.emExecucao}</div></div></div>
+        <div class="kpi-card warning-card"><div class="kpi-icon">🔧</div>
+          <div class="kpi-info"><div class="kpi-label">OS Em andamento</div><div class="kpi-value">${ind.emExecucao}</div></div></div>
+        <div class="kpi-card danger-card"><div class="kpi-icon">⏰</div>
+          <div class="kpi-info"><div class="kpi-label">OS Em Atraso</div><div class="kpi-value">${ind.emAtraso}</div></div></div>
+        <div class="kpi-card"><div class="kpi-icon">👥</div>
+          <div class="kpi-info"><div class="kpi-label">Sem Equipe</div><div class="kpi-value">${ind.semEquipe}</div></div></div>
+        <div class="kpi-card accent-card"><div class="kpi-icon">🚨</div>
+          <div class="kpi-info"><div class="kpi-label">Total</div><div class="kpi-value large">${ind.total}</div></div></div>
+        <div class="kpi-card warning-card"><div class="kpi-icon">🎯</div>
+          <div class="kpi-info"><div class="kpi-label">Meta Estimada (dia)</div><div class="kpi-value">${mf}%</div></div></div>
+        <div class="kpi-card success-card"><div class="kpi-icon">📈</div>
+          <div class="kpi-info"><div class="kpi-label">Meta Atingida (dia)</div><div class="kpi-value">${tf}%</div></div></div>`;
+
+      setTimeout(()=>{
+        desenharGauge(document.getElementById("chart-gauge"),ind.taxa,meta);
+        document.getElementById("gauge-val").textContent=tf+"%";
+        document.getElementById("meta-val").textContent="▼ Meta estimada: "+mf+"%";
+      },50);
+
+      // Pizza — unidades únicas (excluindo CONFORME CRONOGRAMA da contagem)
+      const sts=deduplicar(lista);
+      const sc={};sts.forEach(s=>{if(!EXCECOES.includes(s))sc[s]=(sc[s]||0)+1;});
+      const sl=Object.keys(sc);
+      if(cP)cP.destroy();
+      cP=new Chart(document.getElementById("chart-pizza").getContext("2d"),{
+        type:"pie",
+        data:{labels:sl,datasets:[{data:sl.map(s=>sc[s]),backgroundColor:sl.map(s=>(STATUS_CONFIG[s]||{cor:"#999"}).cor),borderWidth:1}]},
+        options:{responsive:true,plugins:{legend:{position:"right",labels:{boxWidth:12,font:{size:10}}}}}
+      });
+
+      const ps=porSupervisorUnidades(lista);
+      if(cS)cS.destroy();
+      const cv=document.getElementById("chart-sup"); cv.height=Math.max(200,ps.length*30);
+      cS=new Chart(cv.getContext("2d"),{
+        type:"bar",
+        data:{labels:ps.map(s=>s.supervisao),datasets:[
+          {label:"Programadas",data:ps.map(s=>s.programadas),backgroundColor:"#4DA6FF"},
+          {label:"Realizadas", data:ps.map(s=>s.concluidas), backgroundColor:"#00B050"},
+          {label:"Em Execução",data:ps.map(s=>s.emExecucao), backgroundColor:"#FF9900"},
+          {label:"Em Atraso",  data:ps.map(s=>s.emAtraso),   backgroundColor:"#C00000"},
+          {label:"Sem Equipe", data:ps.map(s=>s.semEquipe),  backgroundColor:"#843C0C"}
+        ]},
+        options:{indexAxis:"y",responsive:true,
+          plugins:{legend:{position:"top",labels:{boxWidth:12,font:{size:10}}}},
+          scales:{x:{stacked:false},y:{ticks:{font:{size:10}}}}}
+      });
+
+      document.getElementById("tbody-sup").innerHTML=ps.length
+        ?ps.map(s=>{
+          const tot=s.programadas+s.concluidas+s.emExecucao+s.emAtraso+s.semEquipe;
+          const tx=tot>0?((s.concluidas/tot)*100).toFixed(1):0;
+          return`<tr>
+            <td><strong>${s.supervisao}</strong></td>
+            <td style="color:#4DA6FF;font-weight:600">${s.programadas}</td>
+            <td style="color:#00B050;font-weight:600">${s.concluidas}</td>
+            <td style="color:#FF9900;font-weight:600">${s.emExecucao}</td>
+            <td style="color:#C00000;font-weight:600">${s.emAtraso}</td>
+            <td style="color:#843C0C;font-weight:600">${s.semEquipe}</td>
+            <td><strong>${tx}%</strong></td>
+          </tr>`;
+        }).join("")
+        :`<tr><td colspan="7"><div class="empty-state"><p>Nenhum dado</p></div></td></tr>`;
+    }
+
+    function exportarResumo(){
+      const mes=document.getElementById("f-mes").value,ano=document.getElementById("f-ano").value;
+      const lista=dados.filter(o=>{
+        if(mes&&(o.mes||"").toUpperCase()!==mes)return false;
+        if(ano&&String(o.ano)!==String(ano))return false;
+        return true;
+      });
+      exportarExcel(porSupervisorUnidades(lista).map(s=>({
+        Supervisor:s.supervisao,Programadas:s.programadas,Realizadas:s.concluidas,
+        EmExecução:s.emExecucao,EmAtraso:s.emAtraso,SemEquipe:s.semEquipe
+      })),"resumo_supervisores");
+    }
+  </script>
+</body>
+</html>
