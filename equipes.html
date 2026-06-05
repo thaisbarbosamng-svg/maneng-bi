@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ManEng BI — Equipes</title>
+  <link rel="stylesheet" href="/maneng-bi/css/main.css">
+</head>
+<body>
+  <aside class="sidebar"><div class="sidebar-logo"><span>man<span class="accent">eng</span></span></div><div id="sidebar"></div></aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">Equipes por Supervisor</div>
+      <div class="topbar-filters">
+        <button class="btn btn-outline btn-sm" onclick="exportar()" style="color:#fff;border-color:rgba(255,255,255,.3)">⬇ Excel</button>
+      </div>
+    </div>
+    <div class="content">
+      <div class="filters-bar">
+        <div class="filter-group"><label>Supervisor</label><select id="f-sup" onchange="filtrar()"></select></div>
+        <div class="filter-group"><label>Estado</label><select id="f-estado" onchange="filtrar()"></select></div>
+        <div class="filter-group"><label>Buscar unidade</label><input type="text" id="f-busca" placeholder="Digite..." oninput="filtrar()"></div>
+      </div>
+      <div class="table-card">
+        <div class="table-header"><h3>Unidades por Equipe <span id="contador" style="color:#718096;font-size:.85rem;font-weight:400"></span></h3></div>
+        <div id="loading" class="loading"><div class="spinner"></div> Carregando...</div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead><tr><th>Supervisor</th><th>PCM</th><th>Coordenador</th><th>Bandeira</th><th>Unidade</th><th>Estado</th><th>Periodicidade</th></tr></thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+        <div class="pagination" id="pag"></div>
+      </div>
+    </div>
+  </div>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <script src="/maneng-bi/js/config.js"></script>
+  <script src="/maneng-bi/js/auth.js"></script>
+  <script>
+    let todos=[], filtrados=[], pg=1; const PP=50;
+    requireAuth(async()=>{
+      renderMenu("equipes");
+      try{
+        const raw=await carregarDados();
+        const v=new Set();
+        todos=raw.filter(o=>{const k=`${o.supervisao}|${o.cliente}`;if(v.has(k))return false;v.add(k);return true;})
+          .sort((a,b)=>(a.supervisao||"").localeCompare(b.supervisao||""));
+        popularSelect("f-sup",   todos,"supervisao","Todos supervisores");
+        popularSelect("f-estado",todos,"estado",    "Todos os estados");
+        document.getElementById("loading").style.display="none";
+        filtrar();
+      }catch(e){document.getElementById("loading").innerHTML=`<span style="color:#C00000">${e.message}</span>`;}
+    });
+
+    function filtrar(){
+      const sup=document.getElementById("f-sup").value,est=document.getElementById("f-estado").value,
+            busca=document.getElementById("f-busca").value.toLowerCase();
+      filtrados=todos.filter(o=>{
+        if(sup&&o.supervisao!==sup)return false;
+        if(est&&o.estado    !==est)return false;
+        if(busca&&!`${o.sigla} ${o.cliente}`.toLowerCase().includes(busca))return false;
+        return true;
+      });
+      pg=1; renderT();
+    }
+
+    function renderT(){
+      const ini=(pg-1)*PP,p=filtrados.slice(ini,ini+PP);
+      document.getElementById("contador").textContent=`(${filtrados.length})`;
+      document.getElementById("tbody").innerHTML=p.length?p.map(o=>`
+        <tr>
+          <td><strong>${o.supervisao||"—"}</strong></td>
+          <td>${o.pcm||"—"}</td>
+          <td>${o.coordenador||"—"}</td>
+          <td>${o.sigla||"—"}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.cliente||"—"}</td>
+          <td>${o.estado||"—"}</td>
+          <td>${o.periodicidade||"—"}</td>
+        </tr>`).join("")
+        :`<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">👥</div><p>Nenhuma equipe encontrada</p></div></td></tr>`;
+      const tp=Math.ceil(filtrados.length/PP);
+      if(tp<=1){document.getElementById("pag").innerHTML="";return;}
+      let h="";for(let i=1;i<=tp;i++)if(i===1||i===tp||Math.abs(i-pg)<=2)h+=`<button class="page-btn ${i===pg?"active":""}" onclick="irP(${i})">${i}</button>`;
+      document.getElementById("pag").innerHTML=h;
+    }
+    function irP(n){pg=n;renderT();}
+    function exportar(){exportarExcel(filtrados.map(o=>({Supervisor:o.supervisao,PCM:o.pcm,Coordenador:o.coordenador,Bandeira:o.sigla,Unidade:o.cliente,Estado:o.estado,Periodicidade:o.periodicidade})),"equipes");}
+  </script>
+</body>
+</html>
