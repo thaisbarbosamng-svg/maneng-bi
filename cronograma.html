@@ -23,6 +23,7 @@
     .dc[draggable="true"]{cursor:grab}
     .dc[draggable="true"]:active{cursor:grabbing}
     .hoje-col{background:#e8631a!important;color:#fff}
+    .we-col{opacity:.45}
     .th-filter{display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none}
     .th-filter:hover{opacity:.8}
     .filter-icon{font-size:.65rem;opacity:.7}
@@ -141,8 +142,7 @@
       document.getElementById("f-mes").innerHTML=MESES.map(m=>`<option value="${m}"${m===mm?" selected":""}>${m}</option>`).join("");
       document.getElementById("g-mes").innerHTML=MESES.map(m=>`<option value="${m}"${m===mm?" selected":""}>${m}</option>`).join("");
       let ao="";for(let a=am-1;a<=am+1;a++)ao+=`<option value="${a}"${a===am?" selected":""}>${a}</option>`;
-      document.getElementById("f-ano").innerHTML=ao;
-      document.getElementById("g-ano").value=am;
+      document.getElementById("f-ano").innerHTML=ao;document.getElementById("g-ano").value=am;
       try{
         todosOS=await carregarDados();
         popularSelect("f-sup",todosOS,"supervisao","Todos supervisores");
@@ -200,19 +200,21 @@
         <th class="col-s"><div class="th-filter" onclick="abrirFiltroCol('sigla',this)" style="color:${fc('sigla')}">SIGLA <span class="filter-icon">▼</span></div></th>
         <th class="col-u"><div class="th-filter" onclick="abrirFiltroCol('supervisao',this)" style="color:${fc('supervisao')}">UNIDADE / SUPERVISOR <span class="filter-icon">▼</span></div></th>
         <th class="col-st"><div class="th-filter" onclick="abrirFiltroCol('status',this)" style="color:${fc('status')}">STATUS <span class="filter-icon">▼</span></div></th>`;
-      for(let d=1;d<=dias;d++){const dt=new Date(ano,mn-1,d);const ehH=dt.toDateString()===hoje.toDateString();const dow=dt.getDay();const we=dow===0||dow===6;th+=`<th style="${we?"background:rgba(255,255,255,.06)":""}" class="${ehH?"hoje-col":""}">${d}</th>`;}
+      for(let d=1;d<=dias;d++){
+        const dt=new Date(ano,mn-1,d),ehH=dt.toDateString()===hoje.toDateString(),dow=dt.getDay(),we=dow===0||dow===6;
+        th+=`<th class="${ehH?"hoje-col":we?"we-col":""}">${d}</th>`;
+      }
       th+="</tr>";
       if(!lista.length){document.getElementById("crono-table").innerHTML=`<thead>${th}</thead><tbody><tr><td colspan="${dias+3}"><div class="empty-state"><div class="empty-icon">📅</div><p>Nenhuma OS para ${mes}/${ano}</p></div></td></tr></tbody>`;return;}
       const rows=lista.map(os=>{
         const st=normalizarStatus(os.status),cfg=STATUS_CONFIG[st]||{cor:"#e2e8f0",texto:"#333"};
-        let di=null,df=null;
         const parse=s=>{if(!s)return null;try{const p=s.includes("/")?s.split("/").reverse():s.split("-");return new Date(`${p[0]}-${String(p[1]).padStart(2,"0")}-${String(p[2]).padStart(2,"0")}`);}catch(e){return null;}};
-        di=parse(os.dataInicio);df=parse(os.dataTermino);
+        const di=parse(os.dataInicio),df=parse(os.dataTermino);
         let dh="";
         for(let d=1;d<=dias;d++){
           const dt=new Date(ano,mn-1,d),ehH=dt.toDateString()===hoje.toDateString(),dow=dt.getDay(),we=dow===0||dow===6;
           let ok=false;if(di&&df)ok=dt>=di&&dt<=df;else if(di)ok=dt.toDateString()===di.toDateString();
-          const bg=ok?cfg.cor:we?"#f5f5f5":"#fafafa",cor=ok?cfg.texto||"#fff":"#ddd";
+          const bg=ok?cfg.cor:we?"#efefef":"#fafafa",cor=ok?cfg.texto||"#fff":"#ccc";
           const drag=ok?`draggable="true" ondragstart="dragStart(event,'${os.id}',${d})" ondragend="dragEnd(event)"`:"";
           const over=`ondragover="dragOver(event)" ondrop="drop(event,'${os.id}',${d},${mn},${ano})" ondragleave="dragLeave(event)"`;
           dh+=`<td style="text-align:center;padding:1px" ${over}><div class="dc" ${drag} style="background:${bg};color:${cor};${ehH?"outline:2px solid #FF6B35;":""}" onclick="abrirEd('${os.id}')">${ok?"✓":""}</div></td>`;
@@ -297,8 +299,7 @@
         if(jatem.has(k))return;const per=(os.periodicidade||"MENSAL").toUpperCase(),dias=PERI[per]||30;
         const prox=new Date(dt);prox.setDate(prox.getDate()+dias);
         if(prox>=ini&&prox<=fim){const end=new Date(prox);end.setDate(end.getDate()+2);r.push({...os,mes,ano:String(ano),status:"PROGRAMADO",dataInicio:prox.toLocaleDateString("pt-BR"),dataTermino:end.toLocaleDateString("pt-BR")});}
-      });
-      return r;
+      });return r;
     }
     function exportarGerado(){if(!geradoPreview.length){previewGerar();if(!geradoPreview.length)return;}const mes=document.getElementById("g-mes").value,ano=document.getElementById("g-ano").value;exportarExcel(geradoPreview.map(o=>({Bandeira:o.sigla,Unidade:o.cliente,Supervisor:o.supervisao,PCM:o.pcm,Mês:o.mes,Ano:o.ano,Status:o.status,DataInicio:o.dataInicio,DataTermino:o.dataTermino,Periodicidade:o.periodicidade})),`cronograma_${mes}_${ano}`);}
     function exportarCrono(){
