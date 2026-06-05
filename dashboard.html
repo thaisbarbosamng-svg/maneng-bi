@@ -1,27 +1,223 @@
-function calcularIndicadoresUnidades(lista) {
-  const PRIO = ["FATURADA","AUDITADA","VALIDADA","CONCLUIDA","CONFORME CRONOGRAMA","EM EXECUÇÃO","EM ATRASO","SEM EQUIPE","PROGRAMADO","PROGRAMADA","DISTRATO DE CONTRATO","DISTRATO","LOJA FECHADA","LOJA EM REFORMA","NÃO POSSUI GALERIA NESTA LOJA","RESIDENTE","CANCELADO"];
-  const EXCECOES = ["DISTRATO DE CONTRATO","DISTRATO","LOJA FECHADA","LOJA EM REFORMA","NÃO POSSUI GALERIA NESTA LOJA","RESIDENTE","CANCELADO"];
-  const REALIZADAS = ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA","CONFORME CRONOGRAMA","EM EXECUÇÃO","EM EXECUCAO"];
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ManEng BI — Dashboard</title>
+  <link rel="stylesheet" href="/maneng-bi/css/main.css">
+</head>
+<body>
+  <aside class="sidebar"><div class="sidebar-logo"><span>man<span class="accent">eng</span></span></div><div id="sidebar"></div></aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">Dashboard Manutenção</div>
+      <div class="topbar-filters">
+        <select id="f-mes"></select>
+        <select id="f-ano"></select>
+        <select id="f-supervisor"><option value="">Todos supervisores</option></select>
+        <select id="f-coordenador"><option value="">Todos coordenadores</option></select>
+        <select id="f-estado"><option value="">Todos os estados</option></select>
+      </div>
+    </div>
+    <div class="content">
+      <div id="loading" class="loading"><div class="spinner"></div> Carregando dados...</div>
+      <div id="dash" style="display:none">
+        <div class="kpi-grid" id="kpi-grid"></div>
+        <div class="charts-grid">
+          <div class="chart-card">
+            <h3>Taxa de Conclusão vs Meta</h3>
+            <canvas id="chart-gauge" height="160"></canvas>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:0 8px">
+              <span style="font-size:.75rem;color:#718096">0,00%</span>
+              <div style="text-align:center">
+                <div id="gauge-val" style="font-size:1.8rem;font-weight:700;color:#1a2a4a"></div>
+                <div id="meta-val" style="font-size:.8rem;color:#C00000;font-weight:600"></div>
+              </div>
+              <span style="font-size:.75rem;color:#718096">100,00%</span>
+            </div>
+            <div style="display:flex;gap:16px;justify-content:center;margin-top:8px;font-size:.75rem">
+              <span><span style="display:inline-block;width:12px;height:12px;background:#00B050;border-radius:2px;margin-right:4px"></span>Realizado</span>
+              <span><span style="display:inline-block;width:12px;height:3px;background:#C00000;margin-right:4px;vertical-align:middle"></span>Meta do dia</span>
+            </div>
+          </div>
+          <div class="chart-card"><h3>Distribuição por Status</h3><canvas id="chart-pizza"></canvas></div>
+        </div>
+        <div class="chart-card" style="margin-bottom:16px">
+          <h3>Conclusão por Supervisor (unidades únicas)</h3>
+          <div style="overflow-y:auto;max-height:400px"><canvas id="chart-sup"></canvas></div>
+        </div>
+        <div class="table-card">
+          <div class="table-header">
+            <h3>Resumo por Supervisor</h3>
+            <button class="btn btn-outline btn-sm" onclick="exportarResumo()">⬇ Excel</button>
+          </div>
+          <table>
+            <thead><tr><th>Supervisor</th><th>Programadas</th><th>Realizadas</th><th>Em Execução</th><th>Em Atraso</th><th>Sem Equipe</th><th>Taxa %</th></tr></thead>
+            <tbody id="tbody-sup"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <script src="/maneng-bi/js/config.js"></script>
+  <script src="/maneng-bi/js/auth.js"></script>
+  <script>
+    let dados=[], cP, cS;
+    const EXCECOES  = ["DISTRATO DE CONTRATO","DISTRATO","LOJA FECHADA","LOJA EM REFORMA","NÃO POSSUI GALERIA NESTA LOJA","RESIDENTE","CANCELADO"];
+    const REALIZADAS= ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA","CONFORME CRONOGRAMA","EM EXECUÇÃO","EM EXECUCAO"];
+    const PRIO      = ["FATURADA","AUDITADA","VALIDADA","CONCLUIDA","CONFORME CRONOGRAMA","EM EXECUÇÃO","EM ATRASO","SEM EQUIPE","PROGRAMADO","PROGRAMADA","DISTRATO DE CONTRATO","DISTRATO","LOJA FECHADA","LOJA EM REFORMA","NÃO POSSUI GALERIA NESTA LOJA","RESIDENTE","CANCELADO"];
 
-  // Deduplica por unidade, mantém status mais avançado
-  const por = {};
-  lista.forEach(os => {
-    const k = `${os.sigla}|${os.cliente}`;
-    const st = normalizarStatus(os.status);
-    if (!por[k]) { por[k] = st; return; }
-    const ai = PRIO.indexOf(por[k]), bi = PRIO.indexOf(st);
-    if (bi < ai) por[k] = st;
-  });
+    function diasUteis(ano, mesIdx, ate) {
+      const fim=ate||new Date(ano,mesIdx+1,0).getDate();
+      let c=0;for(let d=1;d<=fim;d++){const dow=new Date(ano,mesIdx,d).getDay();if(dow!==0&&dow!==6)c++;}return c;
+    }
 
-  const sts  = Object.values(por);
-  // Base de cálculo: exclui exceções
-  const base = sts.filter(s => !EXCECOES.includes(s));
-  const total      = base.length;
-  const concluidas = base.filter(s => REALIZADAS.includes(s)).length;
-  const emAtraso   = base.filter(s => s === "EM ATRASO").length;
-  const emExecucao = base.filter(s => ["EM EXECUÇÃO","EM EXECUCAO"].includes(s)).length;
-  const programadas= base.filter(s => ["PROGRAMADO","PROGRAMADA"].includes(s)).length;
-  const semEquipe  = base.filter(s => s === "SEM EQUIPE").length;
-  const taxa = total > 0 ? (concluidas / total) * 100 : 0;
-  return { total, concluidas, emAtraso, emExecucao, programadas, semEquipe, taxa };
-}
+    function calcularMeta(mes, anoStr) {
+      const mesIdx=MESES.indexOf(mes);if(mesIdx<0)return{meta:100,totalUteis:0,hojeUteis:0};
+      const ano=parseInt(anoStr),hoje=new Date(),totalUteis=diasUteis(ano,mesIdx);
+      let hojeUteis;
+      if(hoje.getFullYear()===ano&&hoje.getMonth()===mesIdx) hojeUteis=diasUteis(ano,mesIdx,hoje.getDate());
+      else if(new Date(ano,mesIdx+1,1)<=hoje) hojeUteis=totalUteis;
+      else hojeUteis=0;
+      return{meta:totalUteis>0?(hojeUteis/totalUteis)*100:0,totalUteis,hojeUteis};
+    }
+
+    function deduplicar(lista) {
+      const por={};
+      lista.forEach(os=>{
+        const k=`${os.sigla}|${os.cliente}`,st=normalizarStatus(os.status);
+        if(!por[k]){por[k]=st;return;}
+        const ai=PRIO.indexOf(por[k]),bi=PRIO.indexOf(st);if(bi<ai)por[k]=st;
+      });
+      return Object.values(por);
+    }
+
+    function calcularIndicadoresUnidades(lista) {
+      const base=deduplicar(lista).filter(s=>!EXCECOES.includes(s));
+      const total=base.length;
+      return{
+        total,
+        concluidas: base.filter(s=>REALIZADAS.includes(s)).length,
+        emAtraso:   base.filter(s=>s==="EM ATRASO").length,
+        emExecucao: base.filter(s=>["EM EXECUÇÃO","EM EXECUCAO"].includes(s)).length,
+        programadas:base.filter(s=>["PROGRAMADO","PROGRAMADA"].includes(s)).length,
+        semEquipe:  base.filter(s=>s==="SEM EQUIPE").length,
+        taxa:       total>0?(base.filter(s=>REALIZADAS.includes(s)).length/total)*100:0
+      };
+    }
+
+    function porSupervisorUnidades(lista) {
+      const porSup={};
+      lista.forEach(os=>{
+        const sup=os.supervisao||"Sem Supervisor",k=`${os.sigla}|${os.cliente}`;
+        if(!porSup[sup])porSup[sup]={supervisao:sup,unidades:{}};
+        const st=normalizarStatus(os.status);
+        if(!porSup[sup].unidades[k]){porSup[sup].unidades[k]=st;return;}
+        const ai=PRIO.indexOf(porSup[sup].unidades[k]),bi=PRIO.indexOf(st);if(bi<ai)porSup[sup].unidades[k]=st;
+      });
+      return Object.values(porSup).map(s=>{
+        const base=Object.values(s.unidades).filter(x=>!EXCECOES.includes(x));
+        return{supervisao:s.supervisao,
+          concluidas: base.filter(x=>REALIZADAS.includes(x)).length,
+          programadas:base.filter(x=>["PROGRAMADO","PROGRAMADA"].includes(x)).length,
+          emExecucao: base.filter(x=>["EM EXECUÇÃO","EM EXECUCAO"].includes(x)).length,
+          emAtraso:   base.filter(x=>x==="EM ATRASO").length,
+          semEquipe:  base.filter(x=>x==="SEM EQUIPE").length};
+      }).sort((a,b)=>b.concluidas-a.concluidas);
+    }
+
+    function desenharGauge(canvas, taxa, meta) {
+      canvas.width=canvas.offsetWidth||400;canvas.height=180;
+      const ctx=canvas.getContext("2d"),W=canvas.width,H=canvas.height,cx=W/2,cy=H*0.95,r=Math.min(W*0.42,H*0.82);
+      ctx.clearRect(0,0,W,H);
+      ctx.beginPath();ctx.arc(cx,cy,r,Math.PI,0);ctx.strokeStyle="#e2e8f0";ctx.lineWidth=24;ctx.stroke();
+      if(taxa>0){const ang=Math.PI+(taxa/100)*Math.PI;ctx.beginPath();ctx.arc(cx,cy,r,Math.PI,ang);ctx.strokeStyle="#00B050";ctx.lineWidth=24;ctx.lineCap="butt";ctx.stroke();}
+      if(meta>0&&meta<=100){
+        const angM=Math.PI+(meta/100)*Math.PI;
+        const x1=cx+(r-20)*Math.cos(angM),y1=cy+(r-20)*Math.sin(angM),x2=cx+(r+20)*Math.cos(angM),y2=cy+(r+20)*Math.sin(angM);
+        ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.strokeStyle="#C00000";ctx.lineWidth=3;ctx.lineCap="round";ctx.stroke();
+      }
+    }
+
+    requireAuth(async()=>{
+      renderMenu("dashboard");
+      const am=new Date().getFullYear(),mm=MESES[new Date().getMonth()];
+      document.getElementById("f-mes").innerHTML=`<option value="">Todos os meses</option>`+MESES.map(m=>`<option value="${m}"${m===mm?" selected":""}>${m}</option>`).join("");
+      let ao=`<option value="">Todos os anos</option>`;for(let a=am-1;a<=am+1;a++)ao+=`<option value="${a}"${a===am?" selected":""}>${a}</option>`;
+      document.getElementById("f-ano").innerHTML=ao;
+      try{
+        dados=await carregarDados();
+        popularSelect("f-supervisor",dados,"supervisao","Todos supervisores");
+        popularSelect("f-coordenador",dados,"coordenador","Todos coordenadores");
+        popularSelect("f-estado",dados,"estado","Todos os estados");
+        document.getElementById("loading").style.display="none";
+        document.getElementById("dash").style.display="block";
+        renderD();
+        ["f-mes","f-ano","f-supervisor","f-coordenador","f-estado"].forEach(id=>document.getElementById(id).addEventListener("change",renderD));
+      }catch(e){document.getElementById("loading").innerHTML=`<span style="color:#C00000">Erro: ${e.message}</span>`;}
+    });
+
+    function renderD(){
+      const mes=document.getElementById("f-mes").value,ano=document.getElementById("f-ano").value,
+            sup=document.getElementById("f-supervisor").value,coord=document.getElementById("f-coordenador").value,
+            est=document.getElementById("f-estado").value;
+      const lista=dados.filter(o=>{
+        if(mes&&(o.mes||"").toUpperCase()!==mes)return false;
+        if(ano&&String(o.ano)!==String(ano))return false;
+        if(sup&&o.supervisao!==sup)return false;
+        if(coord&&o.coordenador!==coord)return false;
+        if(est&&o.estado!==est)return false;
+        return true;
+      });
+      const ind=calcularIndicadoresUnidades(lista);
+      const{meta,totalUteis,hojeUteis}=(mes&&ano)?calcularMeta(mes,ano):{meta:100,totalUteis:0,hojeUteis:0};
+      const tf=ind.taxa.toFixed(2).replace(".",","),mf=meta.toFixed(2).replace(".",",");
+
+      document.getElementById("kpi-grid").innerHTML=`
+        <div class="kpi-card"><div class="kpi-icon">📋</div><div class="kpi-info"><div class="kpi-label">Programadas</div><div class="kpi-value">${ind.programadas}</div></div></div>
+        <div class="kpi-card success-card"><div class="kpi-icon">✅</div><div class="kpi-info"><div class="kpi-label">Realizadas (Exec+Conc)</div><div class="kpi-value">${ind.concluidas}</div></div></div>
+        <div class="kpi-card warning-card"><div class="kpi-icon">🔧</div><div class="kpi-info"><div class="kpi-label">Em Execução</div><div class="kpi-value">${ind.emExecucao}</div></div></div>
+        <div class="kpi-card danger-card"><div class="kpi-icon">⏰</div><div class="kpi-info"><div class="kpi-label">Em Atraso</div><div class="kpi-value">${ind.emAtraso}</div></div></div>
+        <div class="kpi-card"><div class="kpi-icon">👥</div><div class="kpi-info"><div class="kpi-label">Sem Equipe</div><div class="kpi-value">${ind.semEquipe}</div></div></div>
+        <div class="kpi-card accent-card"><div class="kpi-icon">🚨</div><div class="kpi-info"><div class="kpi-label">Total Unidades</div><div class="kpi-value large">${ind.total}</div></div></div>
+        <div class="kpi-card warning-card"><div class="kpi-icon">🎯</div><div class="kpi-info"><div class="kpi-label">Meta (dia ${hojeUteis}/${totalUteis} úteis)</div><div class="kpi-value">${mf}%</div></div></div>
+        <div class="kpi-card success-card"><div class="kpi-icon">📈</div><div class="kpi-info"><div class="kpi-label">Taxa de Conclusão</div><div class="kpi-value">${tf}%</div></div></div>`;
+
+      setTimeout(()=>{desenharGauge(document.getElementById("chart-gauge"),ind.taxa,meta);
+        document.getElementById("gauge-val").textContent=tf+"%";
+        document.getElementById("meta-val").textContent="▼ Meta do dia: "+mf+"%";},50);
+
+      const sts=deduplicar(lista),sc={};sts.forEach(s=>{sc[s]=(sc[s]||0)+1;});const sl=Object.keys(sc);
+      if(cP)cP.destroy();
+      cP=new Chart(document.getElementById("chart-pizza").getContext("2d"),{type:"pie",data:{labels:sl,datasets:[{data:sl.map(s=>sc[s]),backgroundColor:sl.map(s=>(STATUS_CONFIG[s]||{cor:"#999"}).cor),borderWidth:1}]},options:{responsive:true,plugins:{legend:{position:"right",labels:{boxWidth:12,font:{size:10}}}}}});
+
+      const ps=porSupervisorUnidades(lista);
+      if(cS)cS.destroy();
+      const cv=document.getElementById("chart-sup");cv.height=Math.max(200,ps.length*30);
+      cS=new Chart(cv.getContext("2d"),{type:"bar",data:{labels:ps.map(s=>s.supervisao),datasets:[
+        {label:"Programadas",data:ps.map(s=>s.programadas),backgroundColor:"#4DA6FF"},
+        {label:"Realizadas", data:ps.map(s=>s.concluidas), backgroundColor:"#00B050"},
+        {label:"Em Execução",data:ps.map(s=>s.emExecucao), backgroundColor:"#FF9900"},
+        {label:"Em Atraso",  data:ps.map(s=>s.emAtraso),   backgroundColor:"#C00000"},
+        {label:"Sem Equipe", data:ps.map(s=>s.semEquipe),  backgroundColor:"#843C0C"}
+      ]},options:{indexAxis:"y",responsive:true,plugins:{legend:{position:"top",labels:{boxWidth:12,font:{size:10}}}},scales:{x:{stacked:false},y:{ticks:{font:{size:10}}}}}});
+
+      document.getElementById("tbody-sup").innerHTML=ps.length?ps.map(s=>{
+        const tot=s.programadas+s.concluidas+s.emExecucao+s.emAtraso+s.semEquipe;
+        const tx=tot>0?((s.concluidas/tot)*100).toFixed(1):0;
+        return`<tr><td><strong>${s.supervisao}</strong></td><td style="color:#4DA6FF;font-weight:600">${s.programadas}</td><td style="color:#00B050;font-weight:600">${s.concluidas}</td><td style="color:#FF9900;font-weight:600">${s.emExecucao}</td><td style="color:#C00000;font-weight:600">${s.emAtraso}</td><td style="color:#843C0C;font-weight:600">${s.semEquipe}</td><td><strong>${tx}%</strong></td></tr>`;
+      }).join(""):`<tr><td colspan="7"><div class="empty-state"><p>Nenhum dado</p></div></td></tr>`;
+    }
+
+    function exportarResumo(){
+      const mes=document.getElementById("f-mes").value,ano=document.getElementById("f-ano").value;
+      const lista=dados.filter(o=>{if(mes&&(o.mes||"").toUpperCase()!==mes)return false;if(ano&&String(o.ano)!==String(ano))return false;return true;});
+      exportarExcel(porSupervisorUnidades(lista).map(s=>({Supervisor:s.supervisao,Programadas:s.programadas,Realizadas:s.concluidas,EmExecução:s.emExecucao,EmAtraso:s.emAtraso,SemEquipe:s.semEquipe})),"resumo_supervisores");
+    }
+  </script>
+</body>
+</html>
