@@ -16,10 +16,10 @@
     <div class="topbar">
       <div class="topbar-title">Dashboard Manutenção</div>
       <div class="topbar-filters">
+        <select id="f-mes"></select>
+        <select id="f-ano"></select>
         <select id="f-supervisor"><option value="">Todos supervisores</option></select>
         <select id="f-coordenador"><option value="">Todos coordenadores</option></select>
-        <select id="f-mes"><option value="">Todos os meses</option></select>
-        <select id="f-ano"><option value="">Todos os anos</option></select>
         <select id="f-estado"><option value="">Todos os estados</option></select>
       </div>
     </div>
@@ -27,9 +27,7 @@
     <div class="content">
       <div id="loading" class="loading"><div class="spinner"></div> Carregando dados...</div>
       <div id="dashboard-content" style="display:none">
-
         <div class="kpi-grid" id="kpi-grid"></div>
-
         <div class="charts-grid">
           <div class="chart-card">
             <h3>Taxa de Conclusão</h3>
@@ -41,7 +39,6 @@
             <canvas id="chart-cronograma"></canvas>
           </div>
         </div>
-
         <div class="charts-grid">
           <div class="chart-card">
             <h3>Distribuição por Status</h3>
@@ -54,8 +51,22 @@
             </div>
           </div>
         </div>
-
         <div class="table-card">
           <div class="table-header">
             <h3>Resumo por Supervisor</h3>
-            <button class="btn btn-outline btn-sm" onclick="exportarResumo()">⬇
+            <button class="btn btn-outline btn-sm" onclick="exportarResumo()">⬇ Excel</button>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Supervisor</th><th>Programadas</th><th>Concluídas</th><th>Em Execução</th><th>Em Atraso</th><th>Sem Equipe</th><th>Taxa %</th></tr>
+            </thead>
+            <tbody id="tabela-supervisores"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script
