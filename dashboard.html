@@ -24,18 +24,32 @@
       <div id="dash" style="display:none">
         <div class="kpi-grid" id="kpi-grid"></div>
         <div class="charts-grid">
-          <div class="chart-card"><h3>Taxa de Conclusão</h3>
-            <canvas id="chart-gauge"></canvas>
-            <div id="gauge-val" style="text-align:center;font-size:2rem;font-weight:700;margin-top:8px;color:#1a2a4a"></div>
+          <!-- Gauge com linha de meta -->
+          <div class="chart-card">
+            <h3>Taxa de Conclusão vs Meta</h3>
+            <canvas id="chart-gauge" height="160"></canvas>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:0 8px">
+              <span style="font-size:.75rem;color:#718096">0,00%</span>
+              <div style="text-align:center">
+                <div id="gauge-val" style="font-size:1.8rem;font-weight:700;color:#1a2a4a"></div>
+                <div id="meta-val" style="font-size:.8rem;color:#C00000;font-weight:600"></div>
+              </div>
+              <span style="font-size:.75rem;color:#718096">100,00%</span>
+            </div>
+            <div style="display:flex;gap:16px;justify-content:center;margin-top:8px;font-size:.75rem">
+              <span><span style="display:inline-block;width:12px;height:12px;background:#00B050;border-radius:2px;margin-right:4px"></span>Realizado</span>
+              <span><span style="display:inline-block;width:12px;height:3px;background:#C00000;margin-right:4px;vertical-align:middle"></span>Meta do dia</span>
+            </div>
           </div>
           <div class="chart-card"><h3>Distribuição por Status</h3><canvas id="chart-pizza"></canvas></div>
         </div>
         <div class="chart-card" style="margin-bottom:16px">
-          <h3>Conclusão por Supervisor</h3>
+          <h3>Conclusão por Supervisor (unidades únicas)</h3>
           <div style="overflow-y:auto;max-height:400px"><canvas id="chart-sup"></canvas></div>
         </div>
         <div class="table-card">
-          <div class="table-header"><h3>Resumo por Supervisor</h3>
+          <div class="table-header">
+            <h3>Resumo por Supervisor</h3>
             <button class="btn btn-outline btn-sm" onclick="exportarResumo()">⬇ Excel</button>
           </div>
           <table>
@@ -54,60 +68,32 @@
   <script src="/maneng-bi/js/auth.js"></script>
   <script>
     let dados=[], cG, cP, cS;
-    requireAuth(async()=>{
-      renderMenu("dashboard");
-      const am=new Date().getFullYear(), mm=MESES[new Date().getMonth()];
-      document.getElementById("f-mes").innerHTML=`<option value="">Todos os meses</option>`+MESES.map(m=>`<option value="${m}"${m===mm?" selected":""}>${m}</option>`).join("");
-      let ao=`<option value="">Todos os anos</option>`;for(let a=am-1;a<=am+1;a++)ao+=`<option value="${a}"${a===am?" selected":""}>${a}</option>`;
-      document.getElementById("f-ano").innerHTML=ao;
-      try{
-        dados=await carregarDados();
-        popularSelect("f-supervisor",dados,"supervisao","Todos supervisores");
-        popularSelect("f-coordenador",dados,"coordenador","Todos coordenadores");
-        popularSelect("f-estado",dados,"estado","Todos os estados");
-        document.getElementById("loading").style.display="none";
-        document.getElementById("dash").style.display="block";
-        renderD();
-        ["f-mes","f-ano","f-supervisor","f-coordenador","f-estado"].forEach(id=>document.getElementById(id).addEventListener("change",renderD));
-      }catch(e){document.getElementById("loading").innerHTML=`<span style="color:#C00000">Erro: ${e.message}</span>`;}
-    });
 
-    function renderD(){
-      const mes=document.getElementById("f-mes").value,ano=document.getElementById("f-ano").value,
-            sup=document.getElementById("f-supervisor").value,coord=document.getElementById("f-coordenador").value,
-            est=document.getElementById("f-estado").value;
-      const lista=dados.filter(o=>{
-        if(mes&&(o.mes||"").toUpperCase()!==mes)return false;
-        if(ano&&String(o.ano)!==String(ano))return false;
-        if(sup&&o.supervisao!==sup)return false;
-        if(coord&&o.coordenador!==coord)return false;
-        if(est&&o.estado!==est)return false;
-        return true;
-      });
-      const ind=calcularIndicadores(lista);
-      document.getElementById("kpi-grid").innerHTML=`
-        <div class="kpi-card"><div class="kpi-icon">📋</div><div class="kpi-info"><div class="kpi-label">OS Programadas</div><div class="kpi-value">${ind.programadas}</div></div></div>
-        <div class="kpi-card success-card"><div class="kpi-icon">✅</div><div class="kpi-info"><div class="kpi-label">OS Concluídas</div><div class="kpi-value">${ind.concluidas}</div></div></div>
-        <div class="kpi-card warning-card"><div class="kpi-icon">🔧</div><div class="kpi-info"><div class="kpi-label">Em Andamento</div><div class="kpi-value">${ind.emExecucao}</div></div></div>
-        <div class="kpi-card danger-card"><div class="kpi-icon">⏰</div><div class="kpi-info"><div class="kpi-label">Em Atraso</div><div class="kpi-value">${ind.emAtraso}</div></div></div>
-        <div class="kpi-card"><div class="kpi-icon">👥</div><div class="kpi-info"><div class="kpi-label">Sem Equipe</div><div class="kpi-value">${ind.semEquipe}</div></div></div>
-        <div class="kpi-card accent-card"><div class="kpi-icon">🚨</div><div class="kpi-info"><div class="kpi-label">Total</div><div class="kpi-value large">${ind.total}</div></div></div>
-        <div class="kpi-card"><div class="kpi-icon">🎯</div><div class="kpi-info"><div class="kpi-label">Meta Estimada</div><div class="kpi-value">100,00%</div></div></div>
-        <div class="kpi-card success-card"><div class="kpi-icon">📈</div><div class="kpi-info"><div class="kpi-label">Taxa de Conclusão</div><div class="kpi-value">${Number(ind.taxaConclusao).toLocaleString("pt-BR",{minimumFractionDigits:2})}%</div></div></div>`;
-      if(cG)cG.destroy();
-      const t=parseFloat(ind.taxaConclusao);
-      cG=new Chart(document.getElementById("chart-gauge").getContext("2d"),{type:"doughnut",data:{datasets:[{data:[t,100-t],backgroundColor:["#00B050","#e2e8f0"],borderWidth:0,circumference:180,rotation:270}]},options:{cutout:"70%",responsive:true,plugins:{legend:{display:false},tooltip:{enabled:false}}}});
-      document.getElementById("gauge-val").textContent=t.toLocaleString("pt-BR",{minimumFractionDigits:2})+"%";
-      const sc={};lista.forEach(o=>{const st=normalizarStatus(o.status);sc[st]=(sc[st]||0)+1;});const sl=Object.keys(sc);
-      if(cP)cP.destroy();
-      cP=new Chart(document.getElementById("chart-pizza").getContext("2d"),{type:"pie",data:{labels:sl,datasets:[{data:sl.map(s=>sc[s]),backgroundColor:sl.map(s=>(STATUS_CONFIG[s]||{cor:"#999"}).cor),borderWidth:1}]},options:{responsive:true,plugins:{legend:{position:"right",labels:{boxWidth:12,font:{size:10}}}}}});
-      const ps=porSupervisor(lista);
-      if(cS)cS.destroy();
-      const cv=document.getElementById("chart-sup");cv.height=Math.max(200,ps.length*30);
-      cS=new Chart(cv.getContext("2d"),{type:"bar",data:{labels:ps.map(s=>s.supervisao),datasets:[{label:"Programadas",data:ps.map(s=>s.programadas),backgroundColor:"#4DA6FF"},{label:"Concluídas",data:ps.map(s=>s.concluidas),backgroundColor:"#00B050"},{label:"Em Execução",data:ps.map(s=>s.emExecucao),backgroundColor:"#FF9900"},{label:"Em Atraso",data:ps.map(s=>s.emAtraso),backgroundColor:"#C00000"},{label:"Sem Equipe",data:ps.map(s=>s.semEquipe),backgroundColor:"#843C0C"}]},options:{indexAxis:"y",responsive:true,plugins:{legend:{position:"top",labels:{boxWidth:12,font:{size:10}}}},scales:{x:{stacked:false},y:{ticks:{font:{size:10}}}}}});
-      document.getElementById("tbody-sup").innerHTML=ps.length?ps.map(s=>{const tot=s.programadas+s.concluidas+s.emExecucao+s.emAtraso+s.semEquipe;const tx=tot>0?((s.concluidas/tot)*100).toFixed(1):0;return`<tr><td><strong>${s.supervisao}</strong></td><td style="color:#4DA6FF;font-weight:600">${s.programadas}</td><td style="color:#00B050;font-weight:600">${s.concluidas}</td><td style="color:#FF9900;font-weight:600">${s.emExecucao}</td><td style="color:#C00000;font-weight:600">${s.emAtraso}</td><td style="color:#843C0C;font-weight:600">${s.semEquipe}</td><td><strong>${tx}%</strong></td></tr>`;}).join(""):`<tr><td colspan="7"><div class="empty-state"><p>Nenhum dado</p></div></td></tr>`;
+    // ── Lógica de dias úteis ──────────────────────────────────
+    function diasUteis(ano, mesIdx, ate) {
+      const fim = ate || new Date(ano, mesIdx+1, 0).getDate();
+      let c=0;
+      for(let d=1;d<=fim;d++){const dow=new Date(ano,mesIdx,d).getDay();if(dow!==0&&dow!==6)c++;}
+      return c;
     }
-    function exportarResumo(){const mes=document.getElementById("f-mes").value,ano=document.getElementById("f-ano").value;const lista=dados.filter(o=>{if(mes&&(o.mes||"").toUpperCase()!==mes)return false;if(ano&&String(o.ano)!==String(ano))return false;return true;});exportarExcel(porSupervisor(lista).map(s=>({Supervisor:s.supervisao,Programadas:s.programadas,Concluídas:s.concluidas,EmExecução:s.emExecucao,EmAtraso:s.emAtraso,SemEquipe:s.semEquipe})),"resumo_supervisores");}
-  </script>
-</body>
-</html>
+
+    function calcularMeta(mes, anoStr) {
+      const mesIdx = MESES.indexOf(mes);
+      if(mesIdx<0) return {meta:100, totalUteis:21, hojeUteis:21};
+      const ano = parseInt(anoStr);
+      const hoje = new Date();
+      const totalUteis = diasUteis(ano, mesIdx);
+      let hojeUteis;
+      const isMesAtual = hoje.getFullYear()===ano && hoje.getMonth()===mesIdx;
+      if(isMesAtual) {
+        hojeUteis = diasUteis(ano, mesIdx, hoje.getDate());
+      } else if(new Date(ano, mesIdx+1, 1) < hoje) {
+        hojeUteis = totalUteis; // mês passado = 100%
+      } else {
+        hojeUteis = 0; // mês futuro = 0%
+      }
+      const meta = totalUteis>0 ? (hojeUteis/totalUteis)*100 : 0;
+      return {meta, totalUteis, hojeUteis};
+    }
+
+    // ── Indicadores por UNIDADES ÚNICAS
