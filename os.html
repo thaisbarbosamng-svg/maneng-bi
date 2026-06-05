@@ -12,7 +12,7 @@
     <div class="topbar">
       <div class="topbar-title">Ordens de Serviço</div>
       <div class="topbar-filters">
-        <button class="btn btn-outline btn-sm" onclick="exportarOS()" style="color:#fff;border-color:rgba(255,255,255,.3)">⬇ Excel</button>
+        <button onclick="exportarOS()" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);padding:7px 12px;border-radius:6px;cursor:pointer;font-size:.85rem">⬇ Excel</button>
       </div>
     </div>
     <div class="content">
@@ -37,42 +37,63 @@
       </div>
     </div>
   </div>
+
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <script src="/maneng-bi/js/config.js"></script>
-  <script src="/maneng-bi/js/auth.js"></script>
   <script>
-    let todos=[], filtrados=[], pg=1;
-    const PP=50;
+    // ── Auth inline (sem depender de auth.js) ─────────────────
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    const auth = firebase.auth();
 
-    function normSt(s){if(!s)return"PROGRAMADO";const m={"PROGRAMADA":"PROGRAMADO","CONCLUIDO":"CONCLUIDA","VALIDADO":"VALIDADA","AUDITADO":"AUDITADA","FATURADO":"FATURADA"};const u=s.toString().trim().toUpperCase();return m[u]||u;}
+    function normSt(s){if(!s)return"PROGRAMADO";const m={"PROGRAMADA":"PROGRAMADO","CONCLUIDO":"CONCLUIDA","VALIDADO":"VALIDADA","AUDITADO":"AUDITADA","FATURADO":"FATURADA"};return m[s.toString().trim().toUpperCase()]||s.toString().trim().toUpperCase();}
 
-    function stChip(st){const s=normSt(st);const cfg=STATUS_CONFIG[s]||{cor:"#999",texto:"#fff"};return`<span class="status-chip" style="background:${cfg.cor};color:${cfg.texto}">${s}</span>`;}
+    function stChip(st){const s=normSt(st);const cfg=(STATUS_CONFIG||{})[s]||{cor:"#999",texto:"#fff"};return`<span class="status-chip" style="background:${cfg.cor};color:${cfg.texto}">${s}</span>`;}
 
     function popSel(id,lista,campo,ph){const sel=document.getElementById(id);if(!sel)return;const v=[...new Set(lista.map(i=>i[campo]).filter(Boolean))].sort();sel.innerHTML=`<option value="">${ph}</option>`+v.map(x=>`<option value="${x}">${x}</option>`).join("");}
 
-    function expXls(dados,nome){const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(dados),"Dados");XLSX.writeFile(wb,`${nome}_${new Date().toISOString().slice(0,10)}.xlsx`);}
+    function renderSidebar(nome){
+      document.getElementById("sidebar").innerHTML=`
+        <div class="sidebar-user"><div class="user-avatar">${(nome||"U").charAt(0).toUpperCase()}</div>
+          <div><div class="user-name">${nome}</div><div class="user-role">Administrador</div></div></div>
+        <nav class="sidebar-nav">
+          <a href="/maneng-bi/dashboard.html"><span class="nav-icon">📊</span> Dashboard</a>
+          <a href="/maneng-bi/cronograma.html"><span class="nav-icon">📅</span> Cronograma</a>
+          <a href="/maneng-bi/os.html" class="active"><span class="nav-icon">🔧</span> Ordens de Serviço</a>
+          <a href="/maneng-bi/clientes.html"><span class="nav-icon">🏪</span> Clientes</a>
+          <a href="/maneng-bi/equipes.html"><span class="nav-icon">👥</span> Equipes</a>
+          <a href="/maneng-bi/alertas.html" style="color:#FF9900"><span class="nav-icon">⚠️</span> Alertas</a>
+          <a href="/maneng-bi/auditoria.html"><span class="nav-icon">🔍</span> Auditoria</a>
+        </nav>
+        <div class="sidebar-footer"><button onclick="auth.signOut().then(()=>location.href='/maneng-bi/login.html')" class="btn-logout">Sair</button></div>`;
+    }
 
-    requireAuth(async()=>{
-      renderMenu("os");
-      try{
-        const resp=await fetch("/maneng-bi/data/ordens_servico.json?t="+Date.now());
-        if(!resp.ok)throw new Error("Arquivo de dados não encontrado. Execute a sincronização.");
-        const json=await resp.json();
-        todos=json.registros||[];
-        popSel("f-sup",   todos,"supervisao", "Todos");
-        popSel("f-coord", todos,"coordenador","Todos");
-        popSel("f-sigla", todos,"sigla",      "Todas");
-        popSel("f-estado",todos,"estado",     "Todos");
+    auth.onAuthStateChanged(async user => {
+      if (!user) { window.location.href = "/maneng-bi/login.html"; return; }
+      renderSidebar(user.displayName || user.email.split("@")[0]);
+      try {
+        const resp = await fetch("/maneng-bi/data/ordens_servico.json?t=" + Date.now());
+        if (!resp.ok) throw new Error("Arquivo de dados não encontrado. Execute a sincronização no GitHub Actions.");
+        const json = await resp.json();
+        todos = json.registros || [];
+        popSel("f-sup",   todos, "supervisao",  "Todos");
+        popSel("f-coord", todos, "coordenador", "Todos");
+        popSel("f-sigla", todos, "sigla",       "Todas");
+        popSel("f-estado",todos, "estado",      "Todos");
         const sv=[...new Set(todos.map(o=>normSt(o.status)).filter(Boolean))].sort();
         document.getElementById("f-status").innerHTML=`<option value="">Todos</option>`+sv.map(s=>`<option>${s}</option>`).join("");
         const mv=[...new Set(todos.map(o=>o.mes).filter(Boolean))];
         document.getElementById("f-mes").innerHTML=`<option value="">Todos</option>`+mv.map(m=>`<option>${m}</option>`).join("");
         document.getElementById("loading").style.display="none";
         filtrar();
-      }catch(e){document.getElementById("loading").innerHTML=`<span style="color:#C00000">${e.message}</span>`;}
+      } catch(e) {
+        document.getElementById("loading").innerHTML=`<span style="color:#C00000">${e.message}</span>`;
+      }
     });
+
+    let todos=[], filtrados=[], pg=1;
+    const PP=50;
 
     function filtrar(){
       const sup=document.getElementById("f-sup").value,coord=document.getElementById("f-coord").value,
@@ -87,13 +108,13 @@
         if(status&&normSt(o.status)!==status)return false;
         return true;
       });
-      pg=1;renderT();
+      pg=1; renderT();
     }
 
     function renderT(){
-      const ini=(pg-1)*PP,p=filtrados.slice(ini,ini+PP);
+      const ini=(pg-1)*PP, p=filtrados.slice(ini,ini+PP);
       document.getElementById("contador").textContent=`(${filtrados.length})`;
-      document.getElementById("tbody").innerHTML=p.length?p.map(o=>`
+      document.getElementById("tbody").innerHTML=p.length ? p.map(o=>`
         <tr>
           <td><strong>${o.sigla||"—"}</strong></td>
           <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.cliente||"—"}</td>
@@ -105,14 +126,20 @@
           <td>${o.dataTermino||"—"}</td>
           <td>${o.periodicidade||"—"}</td>
         </tr>`).join("")
-        :`<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📋</div><p>Nenhuma OS encontrada</p></div></td></tr>`;
+        : `<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📋</div><p>Nenhuma OS encontrada</p></div></td></tr>`;
       const tp=Math.ceil(filtrados.length/PP);
       if(tp<=1){document.getElementById("pag").innerHTML="";return;}
       let h="";for(let i=1;i<=tp;i++)if(i===1||i===tp||Math.abs(i-pg)<=2)h+=`<button class="page-btn ${i===pg?"active":""}" onclick="irP(${i})">${i}</button>`;
       document.getElementById("pag").innerHTML=h;
     }
     function irP(n){pg=n;renderT();}
-    function exportarOS(){expXls(filtrados.map(o=>({Bandeira:o.sigla,Unidade:o.cliente,Supervisor:o.supervisao,PCM:o.pcm,Coordenador:o.coordenador,Estado:o.estado,Mês:o.mes,Ano:o.ano,Status:o.status,Periodicidade:o.periodicidade,DataInicio:o.dataInicio,DataTermino:o.dataTermino})),"ordens_servico");}
+
+    function exportarOS(){
+      if(!filtrados.length)return;
+      const wb=XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(filtrados.map(o=>({Bandeira:o.sigla,Unidade:o.cliente,Supervisor:o.supervisao,PCM:o.pcm,Coordenador:o.coordenador,Estado:o.estado,Mês:o.mes,Ano:o.ano,Status:o.status,Periodicidade:o.periodicidade,DataInicio:o.dataInicio,DataTermino:o.dataTermino}))),"Dados");
+      XLSX.writeFile(wb,`ordens_servico_${new Date().toISOString().slice(0,10)}.xlsx`);
+    }
   </script>
 </body>
 </html>
