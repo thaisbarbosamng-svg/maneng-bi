@@ -7,19 +7,34 @@
   <link rel="stylesheet" href="/maneng-bi/css/main.css">
   <style>
     .crono-wrap{overflow-x:auto}
-    .crono-table{border-collapse:collapse;min-width:900px;width:100%;font-size:.78rem}
-    .crono-table th{background:var(--primary);color:rgba(255,255,255,.85);padding:7px 6px;text-align:center;font-size:.7rem;white-space:nowrap}
-    .crono-table th.col-c{text-align:left;min-width:200px}
-    .crono-table td{padding:3px 4px;border:1px solid #e2e8f0;vertical-align:middle}
-    .crono-table tr:hover{background:#f7fafc}
-    .crono-table td.col-c{font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;padding:4px 8px}
-    .crono-table td.col-s{font-weight:700;font-size:.75rem;color:#4a5568;text-align:center}
-    .sb{display:inline-block;padding:2px 10px;border-radius:12px;font-size:.72rem;font-weight:600;white-space:nowrap}
+    .ct{border-collapse:collapse;min-width:900px;width:100%;font-size:.78rem}
+    .ct th{background:var(--primary);color:rgba(255,255,255,.9);padding:6px 5px;text-align:center;font-size:.7rem;white-space:nowrap;position:sticky;top:0;z-index:5}
+    .ct th.col-s{text-align:left;min-width:80px}
+    .ct th.col-u{text-align:left;min-width:200px}
+    .ct th.col-st{text-align:left;min-width:130px;white-space:nowrap}
+    .ct td{padding:2px 4px;border:1px solid #e2e8f0;vertical-align:middle}
+    .ct tr:hover{background:#f7fafc}
+    .ct td.col-s{font-weight:700;font-size:.75rem;color:#2d3748}
+    .ct td.col-u{font-size:.78rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+    .sb{display:inline-block;padding:2px 8px;border-radius:10px;font-size:.7rem;font-weight:600;white-space:nowrap;cursor:pointer}
+    .dc{width:24px;height:22px;border-radius:3px;margin:1px auto;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;cursor:pointer;transition:opacity .15s;user-select:none}
+    .dc:hover{opacity:.75}
+    .dc.drag-over{outline:2px dashed #FF6B35;opacity:.8}
+    .dc[draggable="true"]{cursor:grab}
+    .dc[draggable="true"]:active{cursor:grabbing}
+    .hoje-col{background:#e8631a!important;color:#fff}
+    .th-filter{display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none}
+    .th-filter:hover{opacity:.8}
+    .filter-icon{font-size:.65rem;opacity:.7}
     .legend{display:flex;flex-wrap:wrap;gap:8px}
-    .legend-item{display:flex;align-items:center;gap:5px;font-size:.72rem}
-    .legend-dot{width:12px;height:12px;border-radius:3px;flex-shrink:0}
-    .dia-cel{width:26px;height:24px;border-radius:4px;margin:1px auto;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:600;cursor:pointer;transition:opacity .15s}
-    .dia-cel:hover{opacity:.75!important}
+    .legend-item{display:flex;align-items:center;gap:4px;font-size:.72rem}
+    .legend-dot{width:11px;height:11px;border-radius:3px;flex-shrink:0}
+    .filter-dropdown{position:fixed;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.12);z-index:9999;min-width:200px;max-height:300px;overflow-y:auto;padding:8px 0}
+    .filter-dropdown input{width:calc(100% - 16px);margin:4px 8px;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;font-size:.8rem}
+    .filter-dropdown label{display:flex;align-items:center;gap:8px;padding:5px 12px;font-size:.8rem;cursor:pointer}
+    .filter-dropdown label:hover{background:#f7fafc}
+    .filter-dropdown .f-actions{display:flex;gap:6px;padding:6px 8px;border-top:1px solid #e2e8f0;margin-top:4px}
+    .badge-edit{font-size:.6rem;background:#FF6B35;color:#fff;padding:1px 4px;border-radius:8px;margin-left:4px;vertical-align:middle}
   </style>
 </head>
 <body>
@@ -32,51 +47,75 @@
         <select id="f-mes"></select>
         <select id="f-ano"></select>
         <select id="f-sup"><option value="">Todos supervisores</option></select>
-        <button onclick="abrirGerar()" style="background:#e8631a;color:#fff;border:none;padding:7px 14px;border-radius:6px;cursor:pointer;font-size:.85rem;font-weight:600">⚡ Gerar Cronograma</button>
+        <button onclick="abrirGerar()" style="background:#e8631a;color:#fff;border:none;padding:7px 14px;border-radius:6px;cursor:pointer;font-size:.85rem;font-weight:600">⚡ Gerar</button>
+        <button onclick="limparEdicoes()" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);padding:7px 10px;border-radius:6px;cursor:pointer;font-size:.8rem" title="Limpar edições locais">🗑 Edições</button>
         <button class="btn btn-outline btn-sm" onclick="exportarCrono()" style="color:#fff;border-color:rgba(255,255,255,.3)">⬇ Excel</button>
       </div>
     </div>
     <div class="content">
-      <div class="chart-card" style="margin-bottom:16px;padding:12px 18px"><div class="legend" id="legend"></div></div>
+      <div class="chart-card" style="margin-bottom:12px;padding:10px 16px"><div class="legend" id="legend"></div></div>
       <div class="table-card">
-        <div class="table-header"><h3 id="titulo">Cronograma</h3><span style="font-size:.8rem;color:#718096">Clique em uma célula para ver detalhes</span></div>
+        <div class="table-header">
+          <h3 id="titulo">Cronograma</h3>
+          <span id="info-edicoes" style="font-size:.8rem;color:#e8631a;font-weight:600"></span>
+        </div>
         <div id="loading" class="loading"><div class="spinner"></div> Carregando...</div>
         <div class="crono-wrap" id="crono-wrap" style="display:none">
-          <table class="crono-table" id="crono-table"></table>
+          <table class="ct" id="crono-table"></table>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- Modal detalhes -->
-  <div id="modal" class="modal-overlay" style="display:none">
-    <div class="modal">
-      <div class="modal-header"><h3 id="modal-titulo">Detalhes</h3><button class="modal-close" onclick="document.getElementById('modal').style.display='none'">✕</button></div>
-      <div class="modal-body" id="modal-body"></div>
-      <div class="modal-footer"><button class="btn btn-outline" onclick="document.getElementById('modal').style.display='none'">Fechar</button></div>
-    </div>
-  </div>
-
-  <!-- Modal gerar -->
-  <div id="modal-gerar" class="modal-overlay" style="display:none">
-    <div class="modal" style="max-width:480px">
-      <div class="modal-header"><h3>⚡ Gerar Cronograma</h3><button class="modal-close" onclick="document.getElementById('modal-gerar').style.display='none'">✕</button></div>
+  <div id="modal-ed" class="modal-overlay" style="display:none">
+    <div class="modal" style="max-width:440px">
+      <div class="modal-header"><h3 id="ed-titulo">Editar OS</h3>
+        <button class="modal-close" onclick="fecharEd()">✕</button></div>
       <div class="modal-body">
-        <p style="margin-bottom:16px;color:#718096;font-size:.875rem">Gera cronograma baseado na última manutenção concluída + periodicidade de cada unidade.</p>
-        <div class="form-row">
-          <div class="form-group"><label>Mês *</label>
-            <select id="g-mes"></select>
-          </div>
-          <div class="form-group"><label>Ano *</label><input type="number" id="g-ano" value="2026" min="2024" max="2030"></div>
+        <p style="margin-bottom:4px;font-size:.8rem;color:#718096" id="ed-sub"></p>
+        <div class="form-row" style="margin-top:12px">
+          <div class="form-group"><label>Data Início</label><input type="date" id="ed-ini"></div>
+          <div class="form-group"><label>Data Término</label><input type="date" id="ed-fim"></div>
         </div>
-        <div class="form-group"><label>Supervisor (opcional)</label><select id="g-sup"><option value="">Todos</option></select></div>
-        <div id="g-preview" style="background:#f7fafc;border-radius:8px;padding:12px;margin-top:8px;font-size:.85rem;display:none"></div>
+        <div class="form-group"><label>Status</label><select id="ed-status"></select></div>
+        <div id="ed-badge" style="margin-top:8px;font-size:.8rem;color:#e8631a;display:none">✏️ Esta OS tem edição local salva</div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" onclick="document.getElementById('modal-gerar').style.display='none'">Cancelar</button>
+        <button class="btn btn-outline" onclick="fecharEd()">Cancelar</button>
+        <button class="btn btn-outline" onclick="limparEdicaoOS()" style="color:#C00000">Remover edição</button>
+        <button class="btn btn-accent" onclick="salvarEd()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-gerar" class="modal-overlay" style="display:none">
+    <div class="modal" style="max-width:460px">
+      <div class="modal-header"><h3>⚡ Gerar Cronograma</h3>
+        <button class="modal-close" onclick="fecharGerar()">✕</button></div>
+      <div class="modal-body">
+        <p style="color:#718096;font-size:.875rem;margin-bottom:14px">Calcula próximas manutenções com base na última concluída + periodicidade.</p>
+        <div class="form-row">
+          <div class="form-group"><label>Mês *</label><select id="g-mes"></select></div>
+          <div class="form-group"><label>Ano *</label><input type="number" id="g-ano" value="2026" min="2024" max="2030"></div>
+        </div>
+        <div class="form-group"><label>Supervisor</label><select id="g-sup"><option value="">Todos</option></select></div>
+        <div id="g-prev" style="background:#f7fafc;border-radius:8px;padding:10px;font-size:.85rem;display:none"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="fecharGerar()">Cancelar</button>
         <button class="btn btn-outline" onclick="previewGerar()">👁 Preview</button>
         <button class="btn btn-accent" onclick="exportarGerado()">⬇ Exportar Excel</button>
       </div>
+    </div>
+  </div>
+
+  <div id="filter-dd" class="filter-dropdown" style="display:none">
+    <input type="text" id="filter-search" placeholder="Buscar..." oninput="filtrarOpcoes()">
+    <div id="filter-opts"></div>
+    <div class="f-actions">
+      <button class="btn btn-sm btn-accent" onclick="aplicarFiltroCol()">Aplicar</button>
+      <button class="btn btn-sm btn-outline" onclick="limparFiltroCol()">Limpar</button>
+      <button class="btn btn-sm btn-outline" onclick="fecharDD()">Fechar</button>
     </div>
   </div>
 
@@ -86,31 +125,58 @@
   <script src="/maneng-bi/js/config.js"></script>
   <script src="/maneng-bi/js/auth.js"></script>
   <script>
-    let todosOS=[], geradoPreview=[];
+    const LS_KEY="maneng_crono_edicoes";
+    let todosOS=[],edicoes={},osEditando=null,geradoPreview=[];
+    let filtroColAtual=null,filtrosColunas={sigla:null,supervisao:null,status:null};
+    let ddOpcoes=[],ddSelecionados=new Set();
+
+    function carregarEdicoes(){try{edicoes=JSON.parse(localStorage.getItem(LS_KEY)||"{}");}catch(e){edicoes={};}}
+    function salvarEdicoes(){localStorage.setItem(LS_KEY,JSON.stringify(edicoes));}
+    function getOS(os){return edicoes[os.id]?{...os,...edicoes[os.id],_editado:true}:os;}
 
     requireAuth(async()=>{
       renderMenu("cronograma");
-      const am=new Date().getFullYear(), mm=MESES[new Date().getMonth()];
-      document.getElementById("f-mes").innerHTML=MESES.map((m,i)=>`<option value="${m}"${m===mm?" selected":""}>${m}</option>`).join("");
-      document.getElementById("g-mes").innerHTML=MESES.map((m,i)=>`<option value="${m}"${m===mm?" selected":""}>${m}</option>`).join("");
+      carregarEdicoes();
+      const am=new Date().getFullYear(),mm=MESES[new Date().getMonth()];
+      document.getElementById("f-mes").innerHTML=MESES.map(m=>`<option value="${m}"${m===mm?" selected":""}>${m}</option>`).join("");
+      document.getElementById("g-mes").innerHTML=MESES.map(m=>`<option value="${m}"${m===mm?" selected":""}>${m}</option>`).join("");
       let ao="";for(let a=am-1;a<=am+1;a++)ao+=`<option value="${a}"${a===am?" selected":""}>${a}</option>`;
       document.getElementById("f-ano").innerHTML=ao;
+      document.getElementById("g-ano").value=am;
       try{
         todosOS=await carregarDados();
-        popularSelect("f-sup", todosOS,"supervisao","Todos supervisores");
-        popularSelect("g-sup", todosOS,"supervisao","Todos");
-        renderLegenda();
-        renderCronograma();
+        popularSelect("f-sup",todosOS,"supervisao","Todos supervisores");
+        popularSelect("g-sup",todosOS,"supervisao","Todos");
+        renderLegenda();renderCronograma();
         ["f-vis","f-mes","f-ano","f-sup"].forEach(id=>document.getElementById(id).addEventListener("change",renderCronograma));
         document.getElementById("loading").style.display="none";
         document.getElementById("crono-wrap").style.display="block";
+        atualizarInfo();
       }catch(e){document.getElementById("loading").innerHTML=`<span style="color:#C00000">${e.message}</span>`;}
     });
 
-    function renderLegenda(){
-      const u=[...new Set(todosOS.map(o=>normalizarStatus(o.status)).filter(Boolean))];
-      document.getElementById("legend").innerHTML=u.map(s=>{const c=STATUS_CONFIG[s]||{cor:"#999"};return`<div class="legend-item"><div class="legend-dot" style="background:${c.cor}"></div>${s}</div>`;}).join("");
+    function atualizarInfo(){const n=Object.keys(edicoes).length;document.getElementById("info-edicoes").textContent=n>0?`✏️ ${n} edição(ões) local(is) salva(s)`:"";}
+    function renderLegenda(){const u=[...new Set(todosOS.map(o=>normalizarStatus(o.status)).filter(Boolean))];document.getElementById("legend").innerHTML=u.map(s=>{const c=STATUS_CONFIG[s]||{cor:"#999"};return`<div class="legend-item"><div class="legend-dot" style="background:${c.cor}"></div>${s}</div>`;}).join("");}
+
+    function abrirFiltroCol(campo,anchor){
+      filtroColAtual=campo;
+      const vals=[...new Set(todosOS.map(o=>campo==="sigla"?o.sigla:campo==="supervisao"?o.supervisao:normalizarStatus(o.status)).filter(Boolean))].sort();
+      ddOpcoes=vals;ddSelecionados=filtrosColunas[campo]?new Set(filtrosColunas[campo]):new Set(vals);
+      document.getElementById("filter-search").value="";renderDDOpts(vals);
+      const dd=document.getElementById("filter-dd");dd.style.display="block";
+      const r=anchor.getBoundingClientRect();
+      dd.style.top=(r.bottom+4)+"px";dd.style.left=Math.min(r.left,window.innerWidth-220)+"px";
+      event.stopPropagation();
     }
+    function renderDDOpts(opts){document.getElementById("filter-opts").innerHTML=`<label style="font-weight:600;border-bottom:1px solid #e2e8f0;padding-bottom:6px"><input type="checkbox" id="dd-all" ${ddSelecionados.size===ddOpcoes.length?"checked":""} onchange="toggleAll(this)"> (Todos)</label>`+opts.map(v=>`<label><input type="checkbox" value="${v}" ${ddSelecionados.has(v)?"checked":""} onchange="toggleOpt(this)"> ${v}</label>`).join("");}
+    function filtrarOpcoes(){const q=document.getElementById("filter-search").value.toLowerCase();renderDDOpts(ddOpcoes.filter(v=>v.toLowerCase().includes(q)));}
+    function toggleAll(cb){if(cb.checked)ddOpcoes.forEach(v=>ddSelecionados.add(v));else ddSelecionados.clear();renderDDOpts(ddOpcoes);}
+    function toggleOpt(cb){if(cb.checked)ddSelecionados.add(cb.value);else ddSelecionados.delete(cb.value);}
+    function aplicarFiltroCol(){filtrosColunas[filtroColAtual]=ddSelecionados.size===ddOpcoes.length?null:[...ddSelecionados];fecharDD();renderCronograma();}
+    function limparFiltroCol(){filtrosColunas[filtroColAtual]=null;fecharDD();renderCronograma();}
+    function fecharDD(){document.getElementById("filter-dd").style.display="none";}
+    document.addEventListener("click",e=>{if(!e.target.closest("#filter-dd")&&!e.target.closest(".th-filter"))fecharDD();});
+    function fc(campo){return filtrosColunas[campo]?"#FF6B35":"rgba(255,255,255,.7)";}
 
     function renderCronograma(){
       const vis=document.getElementById("f-vis").value,mes=document.getElementById("f-mes").value,
@@ -119,118 +185,126 @@
         if(sup&&o.supervisao!==sup)return false;
         if(vis==="mensal")return(o.mes||"").toUpperCase()===mes&&String(o.ano)===String(ano);
         return String(o.ano)===String(ano);
-      });
+      }).map(o=>getOS(o));
+      if(filtrosColunas.sigla)lista=lista.filter(o=>filtrosColunas.sigla.includes(o.sigla));
+      if(filtrosColunas.supervisao)lista=lista.filter(o=>filtrosColunas.supervisao.includes(o.supervisao));
+      if(filtrosColunas.status)lista=lista.filter(o=>filtrosColunas.status.includes(normalizarStatus(o.status)));
       document.getElementById("titulo").textContent=vis==="mensal"?`Cronograma — ${mes}/${ano}`:`Cronograma Anual — ${ano}`;
-      if(vis==="mensal")renderMensal(lista,ano,MESES.indexOf(mes)+1);
-      else renderAnual(lista,ano);
+      if(vis==="mensal")renderMensal(lista,parseInt(ano),MESES.indexOf(mes)+1,mes);
+      else renderAnual(lista,parseInt(ano));
     }
 
-    function renderMensal(lista,ano,mn){
+    function renderMensal(lista,ano,mn,mes){
       const dias=new Date(ano,mn,0).getDate(),hoje=new Date();
-      let th=`<tr><th class="col-s">Sigla</th><th class="col-c">Unidade / Supervisor</th><th>Status</th>`;
-      for(let d=1;d<=dias;d++){const dt=new Date(ano,mn-1,d);th+=`<th style="${dt.toDateString()===hoje.toDateString()?"background:#e8631a;color:#fff":""}">${d}</th>`;}
+      let th=`<tr>
+        <th class="col-s"><div class="th-filter" onclick="abrirFiltroCol('sigla',this)" style="color:${fc('sigla')}">SIGLA <span class="filter-icon">▼</span></div></th>
+        <th class="col-u"><div class="th-filter" onclick="abrirFiltroCol('supervisao',this)" style="color:${fc('supervisao')}">UNIDADE / SUPERVISOR <span class="filter-icon">▼</span></div></th>
+        <th class="col-st"><div class="th-filter" onclick="abrirFiltroCol('status',this)" style="color:${fc('status')}">STATUS <span class="filter-icon">▼</span></div></th>`;
+      for(let d=1;d<=dias;d++){const dt=new Date(ano,mn-1,d);const ehH=dt.toDateString()===hoje.toDateString();const dow=dt.getDay();const we=dow===0||dow===6;th+=`<th style="${we?"background:rgba(255,255,255,.06)":""}" class="${ehH?"hoje-col":""}">${d}</th>`;}
       th+="</tr>";
-      if(!lista.length){document.getElementById("crono-table").innerHTML=`<thead>${th}</thead><tbody><tr><td colspan="${dias+3}"><div class="empty-state"><div class="empty-icon">📅</div><p>Nenhuma OS para este período</p></div></td></tr></tbody>`;return;}
+      if(!lista.length){document.getElementById("crono-table").innerHTML=`<thead>${th}</thead><tbody><tr><td colspan="${dias+3}"><div class="empty-state"><div class="empty-icon">📅</div><p>Nenhuma OS para ${mes}/${ano}</p></div></td></tr></tbody>`;return;}
       const rows=lista.map(os=>{
         const st=normalizarStatus(os.status),cfg=STATUS_CONFIG[st]||{cor:"#e2e8f0",texto:"#333"};
         let di=null,df=null;
-        if(os.dataInicio){try{const p=os.dataInicio.includes("/")?os.dataInicio.split("/"):[os.dataInicio.slice(8),os.dataInicio.slice(5,7),os.dataInicio.slice(0,4)];di=new Date(`${p[2]}-${p[1].padStart(2,"0")}-${p[0].padStart(2,"0")}`);}catch(e){}}
-        if(os.dataTermino){try{const p=os.dataTermino.includes("/")?os.dataTermino.split("/"):[os.dataTermino.slice(8),os.dataTermino.slice(5,7),os.dataTermino.slice(0,4)];df=new Date(`${p[2]}-${p[1].padStart(2,"0")}-${p[0].padStart(2,"0")}`);}catch(e){}}
+        const parse=s=>{if(!s)return null;try{const p=s.includes("/")?s.split("/").reverse():s.split("-");return new Date(`${p[0]}-${String(p[1]).padStart(2,"0")}-${String(p[2]).padStart(2,"0")}`);}catch(e){return null;}};
+        di=parse(os.dataInicio);df=parse(os.dataTermino);
         let dh="";
         for(let d=1;d<=dias;d++){
-          const dt=new Date(ano,mn-1,d),eh=dt.toDateString()===new Date().toDateString();
-          let ok=false;
-          if(di&&df)ok=dt>=di&&dt<=df;
-          else if(di)ok=dt.toDateString()===di.toDateString();
-          dh+=`<td style="text-align:center;padding:1px"><div class="dia-cel" style="background:${ok?cfg.cor:"#f0f4f8"};color:${ok?cfg.texto||"#fff":"#ccc"};opacity:${ok?1:.5};${eh?"outline:2px solid #FF6B35":""}" onclick="verOS('${os.id}')">${ok?"✓":""}</div></td>`;
+          const dt=new Date(ano,mn-1,d),ehH=dt.toDateString()===hoje.toDateString(),dow=dt.getDay(),we=dow===0||dow===6;
+          let ok=false;if(di&&df)ok=dt>=di&&dt<=df;else if(di)ok=dt.toDateString()===di.toDateString();
+          const bg=ok?cfg.cor:we?"#f5f5f5":"#fafafa",cor=ok?cfg.texto||"#fff":"#ddd";
+          const drag=ok?`draggable="true" ondragstart="dragStart(event,'${os.id}',${d})" ondragend="dragEnd(event)"`:"";
+          const over=`ondragover="dragOver(event)" ondrop="drop(event,'${os.id}',${d},${mn},${ano})" ondragleave="dragLeave(event)"`;
+          dh+=`<td style="text-align:center;padding:1px" ${over}><div class="dc" ${drag} style="background:${bg};color:${cor};${ehH?"outline:2px solid #FF6B35;":""}" onclick="abrirEd('${os.id}')">${ok?"✓":""}</div></td>`;
         }
-        const sb=`<span class="sb" style="background:${cfg.cor};color:${cfg.texto||"#fff"}">${st}</span>`;
-        return`<tr><td class="col-s">${os.sigla||"—"}</td><td class="col-c" title="${os.cliente||""}">${os.cliente||"—"}<br><span style="color:#718096;font-size:.7rem">${os.supervisao||""}</span></td><td style="white-space:nowrap">${sb}</td>${dh}</tr>`;
+        const badge=os._editado?`<span class="badge-edit">✏</span>`:"";
+        const sb=`<span class="sb" style="background:${cfg.cor};color:${cfg.texto||"#fff"}" onclick="abrirEd('${os.id}')">${st}</span>`;
+        return`<tr><td class="col-s" onclick="abrirEd('${os.id}')" style="cursor:pointer">${os.sigla||"—"}${badge}</td><td class="col-u" title="${os.cliente||""}" onclick="abrirEd('${os.id}')" style="cursor:pointer">${os.cliente||"—"}<br><span style="color:#718096;font-size:.68rem">${os.supervisao||""}</span></td><td style="white-space:nowrap">${sb}</td>${dh}</tr>`;
       });
       document.getElementById("crono-table").innerHTML=`<thead>${th}</thead><tbody>${rows.join("")}</tbody>`;
     }
 
     function renderAnual(lista,ano){
-      let th=`<tr><th class="col-s">Sigla</th><th class="col-c">Unidade</th>`;
+      let th=`<tr><th class="col-s"><div class="th-filter" onclick="abrirFiltroCol('sigla',this)" style="color:${fc('sigla')}">SIGLA <span class="filter-icon">▼</span></div></th><th class="col-u"><div class="th-filter" onclick="abrirFiltroCol('supervisao',this)" style="color:${fc('supervisao')}">UNIDADE <span class="filter-icon">▼</span></div></th><th class="col-st"><div class="th-filter" onclick="abrirFiltroCol('status',this)" style="color:${fc('status')}">STATUS <span class="filter-icon">▼</span></div></th>`;
       MESES.forEach(m=>th+=`<th>${m.slice(0,3)}</th>`);th+="</tr>";
-      const rows=lista.map(os=>{
-        let mh="";
-        MESES.forEach(m=>{const ok=(os.mes||"").toUpperCase()===m;const cfg=STATUS_CONFIG[normalizarStatus(os.status)]||{cor:"#e2e8f0"};
-          mh+=`<td style="text-align:center;padding:2px"><div class="dia-cel" style="background:${ok?cfg.cor:"transparent"};color:#fff;opacity:${ok?1:.15}" onclick="${ok?`"verOS('${os.id}')"`:"\"\""}"">${ok?"●":""}</div></td>`;
-        });
-        return`<tr><td class="col-s">${os.sigla||"—"}</td><td class="col-c">${os.cliente||"—"}</td>${mh}</tr>`;
-      });
-      document.getElementById("crono-table").innerHTML=`<thead>${th}</thead><tbody>${rows.join("")||'<tr><td colspan="14"><div class="empty-state"><p>Nenhuma OS</p></div></td></tr>'}</tbody>`;
+      const rows=lista.map(os=>{const st=normalizarStatus(os.status),cfg=STATUS_CONFIG[st]||{cor:"#e2e8f0"};let mh="";MESES.forEach(m=>{const ok=(os.mes||"").toUpperCase()===m;mh+=`<td style="text-align:center;padding:2px"><div class="dc" style="background:${ok?cfg.cor:"transparent"};color:#fff;opacity:${ok?1:.15}" onclick="${ok?`"abrirEd('${os.id}')"`:""}">${ok?"●":""}</div></td>`;});const badge=os._editado?`<span class="badge-edit">✏</span>`:"";return`<tr><td class="col-s">${os.sigla||"—"}${badge}</td><td class="col-u">${os.cliente||"—"}</td><td><span class="sb" style="background:${cfg.cor};color:${cfg.texto||"#fff"}">${st}</span></td>${mh}</tr>`;});
+      document.getElementById("crono-table").innerHTML=`<thead>${th}</thead><tbody>${rows.join("")||'<tr><td colspan="15"><div class="empty-state"><p>Nenhuma OS</p></div></td></tr>'}</tbody>`;
     }
 
-    function verOS(id){
-      const os=todosOS.find(o=>o.id===id);if(!os)return;
-      document.getElementById("modal-titulo").textContent=`${os.sigla} — ${os.cliente}`;
-      document.getElementById("modal-body").innerHTML=`
-        <table style="width:100%;font-size:.875rem">
-          <tr><td style="color:#718096;padding:4px 0;width:130px">Unidade</td><td>${os.cliente||"—"}</td></tr>
-          <tr><td style="color:#718096;padding:4px 0">Supervisor</td><td>${os.supervisao||"—"}</td></tr>
-          <tr><td style="color:#718096;padding:4px 0">PCM</td><td>${os.pcm||"—"}</td></tr>
-          <tr><td style="color:#718096;padding:4px 0">Status</td><td>${statusChip(os.status)}</td></tr>
-          <tr><td style="color:#718096;padding:4px 0">Mês/Ano</td><td>${os.mes||"—"} / ${os.ano||"—"}</td></tr>
-          <tr><td style="color:#718096;padding:4px 0">Início</td><td>${os.dataInicio||"—"}</td></tr>
-          <tr><td style="color:#718096;padding:4px 0">Término</td><td>${os.dataTermino||"—"}</td></tr>
-          <tr><td style="color:#718096;padding:4px 0">Periodicidade</td><td>${os.periodicidade||"—"}</td></tr>
-        </table>`;
-      document.getElementById("modal").style.display="flex";
+    let dragOS=null,dragDiaOrigem=null;
+    function dragStart(e,id,d){dragOS=id;dragDiaOrigem=d;e.dataTransfer.effectAllowed="move";e.target.style.opacity=".5";}
+    function dragEnd(e){e.target.style.opacity="1";}
+    function dragOver(e){e.preventDefault();e.currentTarget.querySelector(".dc")?.classList.add("drag-over");}
+    function dragLeave(e){e.currentTarget.querySelector(".dc")?.classList.remove("drag-over");}
+    function drop(e,osId,dd,mn,ano){
+      e.preventDefault();e.currentTarget.querySelector(".dc")?.classList.remove("drag-over");
+      if(!dragOS)return;
+      const os=todosOS.find(o=>o.id===dragOS);if(!os)return;
+      const osC=getOS(os);if(!osC.dataInicio||!osC.dataTermino){dragOS=null;return;}
+      const parse=s=>{try{const p=s.includes("/")?s.split("/").reverse():s.split("-");return new Date(`${p[0]}-${String(p[1]).padStart(2,"0")}-${String(p[2]).padStart(2,"0")}`);}catch(e){return null;}};
+      const di=parse(osC.dataInicio),df=parse(osC.dataTermino);if(!di||!df){dragOS=null;return;}
+      const dur=Math.round((df-di)/(1000*60*60*24)),delta=dd-dragDiaOrigem;
+      const ni=new Date(di);ni.setDate(ni.getDate()+delta);const nf=new Date(ni);nf.setDate(nf.getDate()+dur);
+      const fmt=d=>`${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+      edicoes[dragOS]={...(edicoes[dragOS]||{}),dataInicio:fmt(ni),dataTermino:fmt(nf)};
+      salvarEdicoes();atualizarInfo();renderCronograma();dragOS=null;
     }
 
-    function abrirGerar(){document.getElementById("g-preview").style.display="none";document.getElementById("modal-gerar").style.display="flex";}
+    function abrirEd(osId){
+      const os=todosOS.find(o=>o.id===osId);if(!os)return;
+      const osC=getOS(os);osEditando=osId;
+      document.getElementById("ed-titulo").textContent=`${osC.sigla} — ${osC.cliente}`;
+      document.getElementById("ed-sub").textContent=`Supervisor: ${osC.supervisao||"—"} | PCM: ${osC.pcm||"—"}`;
+      const pi=s=>{if(!s)return"";try{const p=s.includes("/")?s.split("/").reverse():s.split("-");return`${p[0]}-${String(p[1]).padStart(2,"0")}-${String(p[2]).padStart(2,"0")}`;}catch(e){return"";}};
+      document.getElementById("ed-ini").value=pi(osC.dataInicio);
+      document.getElementById("ed-fim").value=pi(osC.dataTermino);
+      document.getElementById("ed-status").innerHTML=Object.keys(STATUS_CONFIG).map(s=>`<option value="${s}"${normalizarStatus(osC.status)===s?" selected":""}>${s}</option>`).join("");
+      document.getElementById("ed-badge").style.display=osC._editado?"block":"none";
+      document.getElementById("modal-ed").style.display="flex";
+    }
+    function fecharEd(){document.getElementById("modal-ed").style.display="none";osEditando=null;}
+    function salvarEd(){
+      if(!osEditando)return;
+      const ini=document.getElementById("ed-ini").value,fim=document.getElementById("ed-fim").value,st=document.getElementById("ed-status").value;
+      const fmt=s=>{if(!s)return"";const[a,m,d]=s.split("-");return`${d}/${m}/${a}`;};
+      edicoes[osEditando]={status:st,dataInicio:fmt(ini),dataTermino:fmt(fim)};
+      salvarEdicoes();atualizarInfo();fecharEd();renderCronograma();toast("Edição salva!");
+    }
+    function limparEdicaoOS(){if(!osEditando)return;delete edicoes[osEditando];salvarEdicoes();atualizarInfo();fecharEd();renderCronograma();toast("Edição removida.");}
+    function limparEdicoes(){if(!confirm("Remover todas as edições locais?"))return;edicoes={};salvarEdicoes();atualizarInfo();renderCronograma();}
 
+    function abrirGerar(){document.getElementById("g-prev").style.display="none";document.getElementById("modal-gerar").style.display="flex";}
+    function fecharGerar(){document.getElementById("modal-gerar").style.display="none";geradoPreview=[];}
     function previewGerar(){
       const mes=document.getElementById("g-mes").value,ano=parseInt(document.getElementById("g-ano").value),sup=document.getElementById("g-sup").value;
-      geradoPreview=calcularProximasManu(mes,ano,sup);
-      const prev=document.getElementById("g-preview");
-      prev.style.display="block";
-      prev.innerHTML=geradoPreview.length>0
-        ?`✅ <strong>${geradoPreview.length}</strong> unidades com manutenção prevista para <strong>${mes}/${ano}</strong>.`
-        :`⚠️ Nenhuma unidade com manutenção prevista para ${mes}/${ano}.<br><small>Verifique se há OS concluídas com periodicidade e datas preenchidas.</small>`;
+      geradoPreview=calcularProximas(mes,ano,sup);
+      const p=document.getElementById("g-prev");p.style.display="block";
+      p.innerHTML=geradoPreview.length?`✅ <strong>${geradoPreview.length}</strong> unidades previstas para <strong>${mes}/${ano}</strong>.`:`⚠️ Nenhuma unidade prevista para ${mes}/${ano}.`;
     }
-
-    function calcularProximasManu(mes,ano,sup){
+    function calcularProximas(mes,ano,sup){
       const OK=["CONCLUIDA","CONCLUIDO","VALIDADA","CONFORME CRONOGRAMA","AUDITADA","FATURADA"];
       const PERI={"MENSAL":30,"BIMESTRAL":60,"TRIMESTRAL":90,"SEMESTRAL":180,"ANUAL":365};
-      const mi=MESES.indexOf(mes),inicioMes=new Date(ano,mi,1),fimMes=new Date(ano,mi+1,0);
-      const porUnidade={};
+      const mi=MESES.indexOf(mes),ini=new Date(ano,mi,1),fim=new Date(ano,mi+1,0);
+      const porU={};
       todosOS.forEach(os=>{
-        if(sup&&os.supervisao!==sup)return;
-        if(!OK.includes(normalizarStatus(os.status)))return;
-        if(!os.dataTermino)return;
-        const chave=`${os.sigla}|${os.cliente}`;
-        const partes=os.dataTermino.includes("/")?os.dataTermino.split("/").reverse():os.dataTermino.split("-");
-        const dt=new Date(`${partes[0]}-${String(partes[1]).padStart(2,"0")}-${String(partes[2]).padStart(2,"0")}`);
-        if(isNaN(dt))return;
-        if(!porUnidade[chave]||dt>porUnidade[chave].dt)porUnidade[chave]={os,dt};
+        if(sup&&os.supervisao!==sup)return;if(!OK.includes(normalizarStatus(os.status)))return;if(!os.dataTermino)return;
+        const k=`${os.sigla}|${os.cliente}`;
+        try{const p=os.dataTermino.includes("/")?os.dataTermino.split("/").reverse():os.dataTermino.split("-");const d=new Date(`${p[0]}-${String(p[1]).padStart(2,"0")}-${String(p[2]).padStart(2,"0")}`);if(isNaN(d))return;if(!porU[k]||d>porU[k].dt)porU[k]={os,dt:d};}catch(e){}
       });
-      const jaTemNoMes=new Set();
-      todosOS.forEach(os=>{if((os.mes||"").toUpperCase()===mes&&String(os.ano)===String(ano))jaTemNoMes.add(`${os.sigla}|${os.cliente}`);});
-      const result=[];
-      Object.entries(porUnidade).forEach(([chave,{os,dt}])=>{
-        if(jaTemNoMes.has(chave))return;
-        const per=(os.periodicidade||"MENSAL").toUpperCase(),dias=PERI[per]||30;
+      const jatem=new Set();todosOS.forEach(os=>{if((os.mes||"").toUpperCase()===mes&&String(os.ano)===String(ano))jatem.add(`${os.sigla}|${os.cliente}`);});
+      const r=[];
+      Object.entries(porU).forEach(([k,{os,dt}])=>{
+        if(jatem.has(k))return;const per=(os.periodicidade||"MENSAL").toUpperCase(),dias=PERI[per]||30;
         const prox=new Date(dt);prox.setDate(prox.getDate()+dias);
-        if(prox>=inicioMes&&prox<=fimMes){
-          const fim=new Date(prox);fim.setDate(fim.getDate()+2);
-          result.push({...os,mes,ano:String(ano),status:"PROGRAMADO",dataInicio:prox.toLocaleDateString("pt-BR"),dataTermino:fim.toLocaleDateString("pt-BR")});
-        }
+        if(prox>=ini&&prox<=fim){const end=new Date(prox);end.setDate(end.getDate()+2);r.push({...os,mes,ano:String(ano),status:"PROGRAMADO",dataInicio:prox.toLocaleDateString("pt-BR"),dataTermino:end.toLocaleDateString("pt-BR")});}
       });
-      return result;
+      return r;
     }
-
-    function exportarGerado(){
-      if(!geradoPreview.length){previewGerar();if(!geradoPreview.length)return;}
-      exportarExcel(geradoPreview.map(o=>({Bandeira:o.sigla,Unidade:o.cliente,Supervisor:o.supervisao,PCM:o.pcm,Mês:o.mes,Ano:o.ano,Status:o.status,DataInicio:o.dataInicio,DataTermino:o.dataTermino,Periodicidade:o.periodicidade})),`cronograma_gerado_${document.getElementById("g-mes").value}_${document.getElementById("g-ano").value}`);
-    }
-
+    function exportarGerado(){if(!geradoPreview.length){previewGerar();if(!geradoPreview.length)return;}const mes=document.getElementById("g-mes").value,ano=document.getElementById("g-ano").value;exportarExcel(geradoPreview.map(o=>({Bandeira:o.sigla,Unidade:o.cliente,Supervisor:o.supervisao,PCM:o.pcm,Mês:o.mes,Ano:o.ano,Status:o.status,DataInicio:o.dataInicio,DataTermino:o.dataTermino,Periodicidade:o.periodicidade})),`cronograma_${mes}_${ano}`);}
     function exportarCrono(){
       const vis=document.getElementById("f-vis").value,mes=document.getElementById("f-mes").value,ano=document.getElementById("f-ano").value,sup=document.getElementById("f-sup").value;
-      const lista=todosOS.filter(o=>{if(sup&&o.supervisao!==sup)return false;if(vis==="mensal")return(o.mes||"").toUpperCase()===mes&&String(o.ano)===String(ano);return String(o.ano)===String(ano);});
-      exportarExcel(lista.map(o=>({Sigla:o.sigla,Unidade:o.cliente,Supervisor:o.supervisao,Mês:o.mes,Ano:o.ano,Status:o.status,DataInicio:o.dataInicio,DataTermino:o.dataTermino,Periodicidade:o.periodicidade})),`cronograma_${ano}`);
+      let lista=todosOS.filter(o=>{if(sup&&o.supervisao!==sup)return false;if(vis==="mensal")return(o.mes||"").toUpperCase()===mes&&String(o.ano)===String(ano);return String(o.ano)===String(ano);}).map(o=>getOS(o));
+      exportarExcel(lista.map(o=>({Sigla:o.sigla,Unidade:o.cliente,Supervisor:o.supervisao,Mês:o.mes,Ano:o.ano,Status:o.status,DataInicio:o.dataInicio||"",DataTermino:o.dataTermino||"",Periodicidade:o.periodicidade,Editado:o._editado?"Sim":""})),`cronograma_${ano}`);
     }
   </script>
 </body>
