@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ManEng BI — Alertas</title>
+  <link rel="stylesheet" href="/maneng-bi/css/main.css">
+</head>
+<body>
+  <aside class="sidebar"><div class="sidebar-logo"><span>man<span class="accent">eng</span></span></div><div id="sidebar"></div></aside>
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">⚠️ Alertas — Ociosidade e Desvios</div>
+      <div class="topbar-filters">
+        <button class="btn btn-outline btn-sm" onclick="exportar()" style="color:#fff;border-color:rgba(255,255,255,.3)">⬇ Excel</button>
+      </div>
+    </div>
+    <div class="content">
+
+      <!-- Cards resumo -->
+      <div class="kpi-grid" id="kpi-alertas" style="margin-bottom:20px"></div>
+
+      <!-- Tabs -->
+      <div style="display:flex;gap:0;margin-bottom:16px">
+        <button class="btn" id="tab-atraso" onclick="mudarTab('atraso')" style="border-radius:8px 0 0 8px;background:var(--primary);color:#fff">⏰ Em Atraso</button>
+        <button class="btn btn-outline" id="tab-ociosas" onclick="mudarTab('ociosas')" style="border-radius:0;border-left:none;border-right:none">😴 Unidades Ociosas</button>
+        <button class="btn btn-outline" id="tab-semdata" onclick="mudarTab('semdata')" style="border-radius:0 8px 8px 0">📅 Sem Data Programada</button>
+      </div>
+
+      <div class="filters-bar">
+        <div class="filter-group"><label>Supervisor</label><select id="f-sup" onchange="filtrar()"></select></div>
+        <div class="filter-group"><label>Bandeira</label><select id="f-sigla" onchange="filtrar()"></select></div>
+        <div class="filter-group"><label>Estado</label><select id="f-estado" onchange="filtrar()"></select></div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-header"><h3 id="titulo-tab">OS Em Atraso</h3><span id="contador" style="color:#718096;font-size:.85rem"></span></div>
+        <div id="loading" class="loading"><div class="spinner"></div> Carregando...</div>
+        <div style="overflow-x:auto">
+          <table>
+            <thead id="thead-tab"></thead>
+            <tbody id="tbody-tab"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <script src="/maneng-bi/js/config.js"></script>
+  <script src="/maneng-bi/js/auth.js"></script>
+  <script>
+    let todos=[], tabAtual="atraso";
+
+    requireAuth(async()=>{
+      renderMenu("alertas");
+      try{
+        todos=await carregarDados();
+        popularSelect("f-sup",  todos,"supervisao","Todos");
+        popularSelect("f-sigla",todos,"sigla",     "Todas");
+        popularSelect("f-estado",todos,"estado",   "Todos");
+        document.getElementById("loading").style.display="none";
+        renderKPIs();
+        filtrar();
+      }catch(e){document.getElementById("loading").innerHTML=`<span style="color:#C00000">${e.message}</span>`;}
+    });
+
+    function renderKPIs(){
+      const emAtraso=todos.filter(o=>normalizarStatus(o.status)==="EM ATRASO").length;
+      const semData=todos.filter(o=>!o.dataInicio&&["PROGRAMADO","PROGRAMADA"].includes(normalizarStatus(o.status))).length;
+      const ociosas=calcularOciosas(todos).length;
+      document.getElementById("kpi-alertas").innerHTML=`
+        <div class="kpi-card danger-card"><div class="kpi-icon">⏰</div><div class="kpi-info"><div class="kpi-label">Em Atraso</div><div class="kpi-value">${emAtraso}</div></div></div>
+        <div class="kpi-card warning-card"><div class="kpi-icon">😴</div><div class="kpi-info"><div class="kpi-label">Unidades Ociosas</div><div class="kpi-value">${ociosas}</div></div></div>
+        <div class="kpi-card"><div class="kpi-icon">📅</div><div class="kpi-info"><div class="kpi-label">Sem Data Programada</div><div class="kpi-value">${semData}</div></div></div>`;
+    }
+
+    function calcularOciosas(lista){
+      // Unidades cuja última manutenção já passou da periodicidade
+      const PERI={"MENSAL":30,"BIMESTRAL":60,"TRIMESTRAL":90,"SEMESTRAL":180,"ANUAL":365};
+      const OK=["CONCLUIDA","CONCLUIDO","VALIDADA","CONFORME CRONOGRAMA","AUDITADA","FATURADA"];
+      const hoje=new Date();
+      const porUnidade={};
+      lista.forEach(os=>{
+        if(!OK.includes(normalizarStatus(os.status)))return;
+        if(!os.dataTermino)return;
+        const chave=`${os.sigla}|${os.cliente}`;
+        try{
+          const p=os.dataTermino.includes("/")?os.dataTermino.split("/").reverse():os.dataTermino.split("-");
+          const dt=new Date(`${p[0]}-${String(p[1]).padStart(2,"0")}-${String(p[2]).padStart(2,"0")}`);
+          if(isNaN(dt))return;
+          if(!porUnidade[chave]||dt>porUnidade[chave].dt)porUnidade[chave]={os,dt};
+        }catch(e){}
+      });
+      const ociosas=[];
+      Object.values(porUnidade).forEach(({os,dt})=>{
+        const per=(os.periodicidade||"MENSAL").toUpperCase();
+        const dias=PERI[per]||30;
+        const proxima=new Date(dt);proxima.setDate(proxima.getDate()+dias);
+        const diasAtraso=Math.floor((hoje-proxima)/(1000*60*60*24));
+        if(diasAtraso>0)ociosas.push({...os,ultimaManutencao:dt.toLocaleDateString("pt-BR"),proximaPrevista:proxima.toLocaleDateString("pt-BR"),diasAtraso});
+      });
+      return ociosas.sort((a,b)=>b.diasAtraso-a.diasAtraso);
+    }
+
+    function mudarTab(tab){
+      tabAtual=tab;
+      ["atraso","ociosas","semdata"].forEach(t=>{
+        const btn=document.getElementById(`tab-${t}`);
+        btn.style.background=t===tab?"var(--primary)":"";
+        btn.style.color=t===tab?"#fff":"";
+        btn.className=t===tab?"btn":"btn btn-outline";
+      });
+      filtrar();
+    }
+
+    function getFiltro(){
+      return{sup:document.getElementById("f-sup").value,sigla:document.getElementById("f-sigla").value,estado:document.getElementById("f-estado").value};
+    }
+
+    function filtrar(){
+      const {sup,sigla,estado}=getFiltro();
+      const aplic=arr=>arr.filter(o=>{
+        if(sup   &&o.supervisao!==sup)   return false;
+        if(sigla &&o.sigla     !==sigla) return false;
+        if(estado&&o.estado    !==estado)return false;
+        return true;
+      });
+
+      if(tabAtual==="atraso"){
+        document.getElementById("titulo-tab").textContent="OS Em Atraso";
+        document.getElementById("thead-tab").innerHTML=`<tr><th>Bandeira</th><th>Unidade</th><th>Supervisor</th><th>PCM</th><th>Mês/Ano</th><th>Data Término</th></tr>`;
+        const lista=aplic(todos.filter(o=>normalizarStatus(o.status)==="EM ATRASO"));
+        document.getElementById("contador").textContent=`${lista.length} registros`;
+        document.getElementById("tbody-tab").innerHTML=lista.length?lista.map(o=>`
+          <tr>
+            <td><strong>${o.sigla||"—"}</strong></td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.cliente||"—"}</td>
+            <td>${o.supervisao||"—"}</td>
+            <td>${o.pcm||"—"}</td>
+            <td>${o.mes||"—"} / ${o.ano||"—"}</td>
+            <td style="color:#C00000;font-weight:600">${o.dataTermino||"—"}</td>
+          </tr>`).join("")
+          :`<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">✅</div><p>Nenhuma OS em atraso</p></div></td></tr>`;
+
+      }else if(tabAtual==="ociosas"){
+        document.getElementById("titulo-tab").textContent="Unidades Ociosas (passou da periodicidade)";
+        document.getElementById("thead-tab").innerHTML=`<tr><th>Bandeira</th><th>Unidade</th><th>Supervisor</th><th>Periodicidade</th><th>Última Manutenção</th><th>Próxima Prevista</th><th>Dias em Atraso</th></tr>`;
+        const lista=aplic(calcularOciosas(todos));
+        document.getElementById("contador").textContent=`${lista.length} unidades`;
+        document.getElementById("tbody-tab").innerHTML=lista.length?lista.map(o=>`
+          <tr>
+            <td><strong>${o.sigla||"—"}</strong></td>
+            <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.cliente||"—"}</td>
+            <td>${o.supervisao||"—"}</td>
+            <td>${o.periodicidade||"—"}</td>
+            <td>${o.ultimaManutencao||"—"}</td>
+            <td style="color:#C00000">${o.proximaPrevista||"—"}</td>
+            <td><span style="background:#C00000;color:#fff;padding:2px 8px;border-radius:12px;font-size:.75rem;font-weight:600">${o.diasAtraso} dias</span></td>
+          </tr>`).join("")
+          :`<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">✅</div><p>Nenhuma unidade ociosa</p></div></td></tr>`;
+
+      }else{
+        document.getElementById("titulo-tab").textContent="OS Programadas Sem Data";
+        document.getElementById("thead-tab").innerHTML=`<tr><th>Bandeira</th><th>Unidade</th><th>Supervisor</th><th>PCM</th><th>Mês/Ano</th><th>Periodicidade</th></tr>`;
+        const lista=aplic(todos.filter(o=>!o.dataInicio&&["PROGRAMADO","PROGRAMADA"].includes(normalizarStatus(o.status))));
+        document.getElementById("contador").textContent=`${lista.length} registros`;
+        document.getElementById("tbody-tab").innerHTML=lista.length?lista.map(o=>`
+          <tr>
+            <td><strong>${o.sigla||"—"}</strong></td>
+            <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.cliente||"—"}</td>
+            <td>${o.supervisao||"—"}</td>
+            <td>${o.pcm||"—"}</td>
+            <td>${o.mes||"—"} / ${o.ano||"—"}</td>
+            <td>${o.periodicidade||"—"}</td>
+          </tr>`).join("")
+          :`<tr><td colspan="6"><div class="empty-state"><div class="empty-icon">📅</div><p>Todas as OS têm data programada</p></div></td></tr>`;
+      }
+    }
+
+    function exportar(){
+      const {sup,sigla,estado}=getFiltro();
+      const aplic=arr=>arr.filter(o=>{if(sup&&o.supervisao!==sup)return false;if(sigla&&o.sigla!==sigla)return false;if(estado&&o.estado!==estado)return false;return true;});
+      let dados=[];
+      if(tabAtual==="atraso")dados=aplic(todos.filter(o=>normalizarStatus(o.status)==="EM ATRASO")).map(o=>({Bandeira:o.sigla,Unidade:o.cliente,Supervisor:o.supervisao,PCM:o.pcm,Mês:o.mes,Ano:o.ano,DataTermino:o.dataTermino}));
+      else if(tabAtual==="ociosas")dados=aplic(calcularOciosas(todos)).map(o=>({Bandeira:o.sigla,Unidade:o.cliente,Supervisor:o.supervisao,Periodicidade:o.periodicidade,UltimaManutencao:o.ultimaManutencao,ProximaPrevista:o.proximaPrevista,DiasAtraso:o.diasAtraso}));
+      else dados=aplic(todos.filter(o=>!o.dataInicio&&["PROGRAMADO","PROGRAMADA"].includes(normalizarStatus(o.status)))).map(o=>({Bandeira:o.sigla,Unidade:o.cliente,Supervisor:o.supervisao,Mês:o.mes,Periodicidade:o.periodicidade}));
+      exportarExcel(dados,`alertas_${tabAtual}`);
+    }
+  </script>
+</body>
+</html>
