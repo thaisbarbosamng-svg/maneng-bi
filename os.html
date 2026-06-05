@@ -27,7 +27,7 @@
       <div class="table-card">
         <div class="table-header"><h3>Ordens de Serviço <span id="contador" style="color:#718096;font-size:.85rem;font-weight:400"></span></h3></div>
         <div id="loading" class="loading"><div class="spinner"></div> Carregando...</div>
-        <div style="overflow-x:auto" id="twrap">
+        <div style="overflow-x:auto">
           <table>
             <thead><tr><th>Bandeira</th><th>Unidade</th><th>Supervisor</th><th>PCM</th><th>Mês</th><th>Status</th><th>Início</th><th>Término</th><th>Periodicidade</th></tr></thead>
             <tbody id="tbody"></tbody>
@@ -43,16 +43,29 @@
   <script src="/maneng-bi/js/config.js"></script>
   <script src="/maneng-bi/js/auth.js"></script>
   <script>
-    let todos=[], filtrados=[], pg=1; const PP=50;
+    let todos=[], filtrados=[], pg=1;
+    const PP=50;
+
+    function normSt(s){if(!s)return"PROGRAMADO";const m={"PROGRAMADA":"PROGRAMADO","CONCLUIDO":"CONCLUIDA","VALIDADO":"VALIDADA","AUDITADO":"AUDITADA","FATURADO":"FATURADA"};const u=s.toString().trim().toUpperCase();return m[u]||u;}
+
+    function stChip(st){const s=normSt(st);const cfg=STATUS_CONFIG[s]||{cor:"#999",texto:"#fff"};return`<span class="status-chip" style="background:${cfg.cor};color:${cfg.texto}">${s}</span>`;}
+
+    function popSel(id,lista,campo,ph){const sel=document.getElementById(id);if(!sel)return;const v=[...new Set(lista.map(i=>i[campo]).filter(Boolean))].sort();sel.innerHTML=`<option value="">${ph}</option>`+v.map(x=>`<option value="${x}">${x}</option>`).join("");}
+
+    function expXls(dados,nome){const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(dados),"Dados");XLSX.writeFile(wb,`${nome}_${new Date().toISOString().slice(0,10)}.xlsx`);}
+
     requireAuth(async()=>{
       renderMenu("os");
       try{
-        todos=await carregarDados();
-        popularSelect("f-sup",   todos,"supervisao", "Todos");
-        popularSelect("f-coord", todos,"coordenador","Todos");
-        popularSelect("f-sigla", todos,"sigla",      "Todas");
-        popularSelect("f-estado",todos,"estado",     "Todos");
-        const sv=[...new Set(todos.map(o=>normalizarStatus(o.status)).filter(Boolean))].sort();
+        const resp=await fetch("/maneng-bi/data/ordens_servico.json?t="+Date.now());
+        if(!resp.ok)throw new Error("Arquivo de dados não encontrado. Execute a sincronização.");
+        const json=await resp.json();
+        todos=json.registros||[];
+        popSel("f-sup",   todos,"supervisao", "Todos");
+        popSel("f-coord", todos,"coordenador","Todos");
+        popSel("f-sigla", todos,"sigla",      "Todas");
+        popSel("f-estado",todos,"estado",     "Todos");
+        const sv=[...new Set(todos.map(o=>normSt(o.status)).filter(Boolean))].sort();
         document.getElementById("f-status").innerHTML=`<option value="">Todos</option>`+sv.map(s=>`<option>${s}</option>`).join("");
         const mv=[...new Set(todos.map(o=>o.mes).filter(Boolean))];
         document.getElementById("f-mes").innerHTML=`<option value="">Todos</option>`+mv.map(m=>`<option>${m}</option>`).join("");
@@ -71,14 +84,14 @@
         if(mes   &&(o.mes||"").toUpperCase()!==mes) return false;
         if(sigla &&o.sigla      !==sigla) return false;
         if(estado&&o.estado     !==estado)return false;
-        if(status&&normalizarStatus(o.status)!==status)return false;
+        if(status&&normSt(o.status)!==status)return false;
         return true;
       });
-      pg=1; renderT();
+      pg=1;renderT();
     }
 
     function renderT(){
-      const ini=(pg-1)*PP, p=filtrados.slice(ini,ini+PP);
+      const ini=(pg-1)*PP,p=filtrados.slice(ini,ini+PP);
       document.getElementById("contador").textContent=`(${filtrados.length})`;
       document.getElementById("tbody").innerHTML=p.length?p.map(o=>`
         <tr>
@@ -87,7 +100,7 @@
           <td>${o.supervisao||"—"}</td>
           <td>${o.pcm||"—"}</td>
           <td>${o.mes||"—"} ${o.ano||""}</td>
-          <td>${statusChip(o.status)}</td>
+          <td>${stChip(o.status)}</td>
           <td>${o.dataInicio||"—"}</td>
           <td>${o.dataTermino||"—"}</td>
           <td>${o.periodicidade||"—"}</td>
@@ -95,4 +108,11 @@
         :`<tr><td colspan="9"><div class="empty-state"><div class="empty-icon">📋</div><p>Nenhuma OS encontrada</p></div></td></tr>`;
       const tp=Math.ceil(filtrados.length/PP);
       if(tp<=1){document.getElementById("pag").innerHTML="";return;}
-      let h="";for(let i=1;i<=tp;i++)if(i===1||i==
+      let h="";for(let i=1;i<=tp;i++)if(i===1||i===tp||Math.abs(i-pg)<=2)h+=`<button class="page-btn ${i===pg?"active":""}" onclick="irP(${i})">${i}</button>`;
+      document.getElementById("pag").innerHTML=h;
+    }
+    function irP(n){pg=n;renderT();}
+    function exportarOS(){expXls(filtrados.map(o=>({Bandeira:o.sigla,Unidade:o.cliente,Supervisor:o.supervisao,PCM:o.pcm,Coordenador:o.coordenador,Estado:o.estado,Mês:o.mes,Ano:o.ano,Status:o.status,Periodicidade:o.periodicidade,DataInicio:o.dataInicio,DataTermino:o.dataTermino})),"ordens_servico");}
+  </script>
+</body>
+</html>
