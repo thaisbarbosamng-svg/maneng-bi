@@ -5,24 +5,37 @@ on:
     - cron: "0 5 * * *"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   sync:
     runs-on: ubuntu-latest
-    name: Sync Sheets ↔ Firestore
+    name: Sync Sheets → JSON
     steps:
       - name: Checkout repositório
         uses: actions/checkout@v4
+
       - name: Configurar Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
+
       - name: Instalar dependências
         working-directory: scripts
         run: npm install
+
       - name: Executar sincronização
         working-directory: scripts
         env:
-          GOOGLE_CREDENTIALS:   ${{ secrets.GOOGLE_CREDENTIALS }}
-          FIREBASE_CREDENTIALS: ${{ secrets.FIREBASE_CREDENTIALS }}
-          SPREADSHEET_ID:       ${{ secrets.SPREADSHEET_ID }}
+          GOOGLE_CREDENTIALS: ${{ secrets.GOOGLE_CREDENTIALS }}
+          SPREADSHEET_ID:     ${{ secrets.SPREADSHEET_ID }}
         run: node sync-sheets.js
+
+      - name: Commitar dados
+        run: |
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config user.name  "github-actions[bot]"
+          git add data/
+          git diff --staged --quiet || git commit -m "Sync $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push
