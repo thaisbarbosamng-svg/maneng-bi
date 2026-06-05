@@ -94,7 +94,7 @@ async function lerSheets(sheets) {
     coordenador:    get(row, C.COORDENADOR),
     mes:            get(row, C.MES).toUpperCase().split("/")[0].trim(),
     tipoManutencao: get(row, C.TIPO),
-    status:         get(row, C.STATUS).toUpperCase().trim() || "PROGRAMADA",
+    status:         get(row, C.STATUS).toUpperCase().trim() || "PROGRAMADO",
     pmoc2026:       get(row, C.PMOC),
     ano:            get(row, C.ANO),
     dataInicio:     get(row, C.DATA_INICIO),
