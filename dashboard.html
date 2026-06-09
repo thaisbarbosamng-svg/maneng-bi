@@ -54,7 +54,7 @@
           <div class="chart-card"><h3>Distribuição por Status</h3><canvas id="chart-pizza"></canvas></div>
         </div>
         <div class="chart-card" style="margin-bottom:16px">
-          <h3>Conclusão por Supervisor (unidades únicas)</h3>
+          <h3>Conclusão por Supervisor</h3>
           <div style="overflow-y:auto;max-height:400px"><canvas id="chart-sup"></canvas></div>
         </div>
         <div class="table-card">
@@ -74,31 +74,63 @@
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <script src="/maneng-bi/js/config.js"></script>
   <script>
-    // Só CONFORME CRONOGRAMA é excluído — igual ao Power BI
-    const EXCECOES = ["CONFORME CRONOGRAMA"];
-    const STS_CONC = ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA"];
-    const PRIO = ["FATURADA","AUDITADA","VALIDADA","CONCLUIDA","EM EXECUÇÃO","EM ATRASO","SEM EQUIPE","PROGRAMADO","PROGRAMADA","CONFORME CRONOGRAMA","DISTRATO DE CONTRATO","DISTRATO","LOJA FECHADA","LOJA EM REFORMA","NÃO POSSUI GALERIA NESTA LOJA","RESIDENTE","CANCELADO"];
+    // ── Lógica IDÊNTICA ao Power BI (DAX replicado) ───────────
+    // Total = COUNTROWS onde STATUS <> "CONFORME CRONOGRAMA" (sem dedup)
+    // Feitos = CONCLUIDA + EM EXECUÇÃO + VALIDADA
+    // Denom  = CONCLUIDA + EM EXECUÇÃO + PROGRAMADO + EM ATRASO + SEM EQUIPE + VALIDADA
+    // Taxa   = Feitos / Denom
+
     const FERIADOS = new Set(["2026-01-01","2026-02-16","2026-02-17","2026-04-03","2026-04-21","2026-05-01","2026-06-04","2026-09-07","2026-10-12","2026-11-02","2026-11-15","2026-11-20","2026-12-25","2027-01-01","2027-02-15","2027-02-16","2027-04-02","2027-04-21","2027-05-01","2027-05-27","2027-09-07","2027-10-12","2027-11-02","2027-11-15","2027-11-20","2027-12-25"]);
 
     function normSt(s){if(!s)return"PROGRAMADO";const m={"PROGRAMADA":"PROGRAMADO","CONCLUIDO":"CONCLUIDA","VALIDADO":"VALIDADA","AUDITADO":"AUDITADA","FATURADO":"FATURADA"};const u=s.toString().trim().toUpperCase();return m[u]||u;}
     function isDiaUtil(a,mi,d){const dow=new Date(a,mi,d).getDay();if(dow===0||dow===6)return false;return!FERIADOS.has(`${a}-${String(mi+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`);}
     function diasUteis(a,mi,ate){const f=ate||new Date(a,mi+1,0).getDate();let c=0;for(let d=1;d<=f;d++)if(isDiaUtil(a,mi,d))c++;return c;}
     function calcMeta(mes,ano){const mi=MESES.indexOf(mes);if(mi<0)return{meta:100,tu:0,hu:0};const a=parseInt(ano),h=new Date(),tu=diasUteis(a,mi);let hu;if(h.getFullYear()===a&&h.getMonth()===mi)hu=diasUteis(a,mi,h.getDate());else if(new Date(a,mi+1,1)<=h)hu=tu;else hu=0;return{meta:tu>0?(hu/tu)*100:0,tu,hu};}
-    function dedup(lista){const p={};lista.forEach(o=>{const k=`${o.sigla}|${o.cliente}`,st=normSt(o.status);if(!p[k]){p[k]=st;return;}const ai=PRIO.indexOf(p[k]),bi=PRIO.indexOf(st);if(bi<ai)p[k]=st;});return Object.values(p);}
 
-    function calcInd(lista){
-      const sts=dedup(lista).filter(s=>!EXCECOES.includes(s));
-      const tot=sts.length;
-      const conc=sts.filter(s=>STS_CONC.includes(s)).length;
-      const ex=sts.filter(s=>["EM EXECUÇÃO","EM EXECUCAO"].includes(s)).length;
-      const at=sts.filter(s=>s==="EM ATRASO").length;
-      const prog=sts.filter(s=>["PROGRAMADO","PROGRAMADA"].includes(s)).length;
-      // Sem equipe = unidades sem supervisor (como o Power BI calcula)
-      const seq=lista.filter(o=>!o.supervisao||o.supervisao.trim()==="").length;
-      return{tot,conc,ex,at,prog,seq,taxa:tot>0?((conc+ex)/tot)*100:0};
+    function calcInd(lista) {
+      // DAX: COUNTROWS sem deduplicação por unidade
+      const STS_FEITOS = ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA","EM EXECUÇÃO","EM EXECUCAO"];
+      const STS_DENOM  = ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA","EM EXECUÇÃO","EM EXECUCAO","PROGRAMADO","PROGRAMADA","EM ATRASO","SEM EQUIPE"];
+
+      const sts = lista.map(o => normSt(o.status));
+
+      // Total = todas as linhas EXCETO CONFORME CRONOGRAMA
+      const total  = sts.filter(s => s !== "CONFORME CRONOGRAMA").length;
+      const prog   = sts.filter(s => ["PROGRAMADO","PROGRAMADA"].includes(s)).length;
+      const conc   = sts.filter(s => ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA"].includes(s)).length;
+      const ex     = sts.filter(s => ["EM EXECUÇÃO","EM EXECUCAO"].includes(s)).length;
+      const at     = sts.filter(s => s === "EM ATRASO").length;
+      const seq    = sts.filter(s => s === "SEM EQUIPE").length;
+      const feitos = sts.filter(s => STS_FEITOS.includes(s)).length;
+      const denom  = sts.filter(s => STS_DENOM.includes(s)).length;
+      const taxa   = denom > 0 ? (feitos / denom) * 100 : 0;
+
+      return {total, prog, conc, ex, at, seq, taxa};
     }
 
-    function porSup(lista){const p={};lista.forEach(o=>{const s=o.supervisao||"Sem Supervisor",k=`${o.sigla}|${o.cliente}`;if(!p[s])p[s]={s,u:{}};const st=normSt(o.status);if(!p[s].u[k]){p[s].u[k]=st;return;}const ai=PRIO.indexOf(p[s].u[k]),bi=PRIO.indexOf(st);if(bi<ai)p[s].u[k]=st;});return Object.values(p).map(x=>{const base=Object.values(x.u).filter(v=>!EXCECOES.includes(v));return{s:x.s,conc:base.filter(v=>STS_CONC.includes(v)).length,ex:base.filter(v=>["EM EXECUÇÃO","EM EXECUCAO"].includes(v)).length,prog:base.filter(v=>["PROGRAMADO","PROGRAMADA"].includes(v)).length,at:base.filter(v=>v==="EM ATRASO").length,seq:base.filter(v=>v==="SEM EQUIPE").length};}).sort((a,b)=>b.conc-a.conc);}
+    function porSup(lista) {
+      const STS_FEITOS = ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA","EM EXECUÇÃO","EM EXECUCAO"];
+      const STS_DENOM  = ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA","EM EXECUÇÃO","EM EXECUCAO","PROGRAMADO","PROGRAMADA","EM ATRASO","SEM EQUIPE"];
+      const grupos = {};
+      lista.forEach(o => {
+        const s = o.supervisao || "Sem Supervisor";
+        if(!grupos[s]) grupos[s] = [];
+        grupos[s].push(normSt(o.status));
+      });
+      return Object.entries(grupos).map(([s, sts]) => {
+        const feitos = sts.filter(x => STS_FEITOS.includes(x)).length;
+        const denom  = sts.filter(x => STS_DENOM.includes(x)).length;
+        return {
+          s,
+          prog: sts.filter(x => ["PROGRAMADO","PROGRAMADA"].includes(x)).length,
+          conc: sts.filter(x => ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA"].includes(x)).length,
+          ex:   sts.filter(x => ["EM EXECUÇÃO","EM EXECUCAO"].includes(x)).length,
+          at:   sts.filter(x => x === "EM ATRASO").length,
+          seq:  sts.filter(x => x === "SEM EQUIPE").length,
+          taxa: denom > 0 ? (feitos / denom) * 100 : 0
+        };
+      }).sort((a,b) => b.conc - a.conc);
+    }
 
     function popSel(id,lista,campo,ph){const sel=document.getElementById(id);if(!sel)return;const v=[...new Set(lista.map(i=>i[campo]).filter(Boolean))].sort();sel.innerHTML=`<option value="">${ph}</option>`+v.map(x=>`<option value="${x}">${x}</option>`).join("");}
 
@@ -148,13 +180,13 @@
         <div class="kpi-card warning-card"><div class="kpi-icon">🔧</div><div class="kpi-info"><div class="kpi-label">OS Em andamento</div><div class="kpi-value">${ind.ex}</div></div></div>
         <div class="kpi-card danger-card"><div class="kpi-icon">⏰</div><div class="kpi-info"><div class="kpi-label">OS Em Atraso</div><div class="kpi-value">${ind.at}</div></div></div>
         <div class="kpi-card"><div class="kpi-icon">👥</div><div class="kpi-info"><div class="kpi-label">Não possui Equipe</div><div class="kpi-value">${ind.seq}</div></div></div>
-        <div class="kpi-card accent-card"><div class="kpi-icon">🚨</div><div class="kpi-info"><div class="kpi-label">Total</div><div class="kpi-value large">${ind.tot}</div></div></div>
+        <div class="kpi-card accent-card"><div class="kpi-icon">🚨</div><div class="kpi-info"><div class="kpi-label">Total</div><div class="kpi-value large">${ind.total}</div></div></div>
         <div class="kpi-card warning-card"><div class="kpi-icon">🎯</div><div class="kpi-info"><div class="kpi-label">Meta Estimada (dia)</div><div class="kpi-value">${mf}%</div></div></div>
         <div class="kpi-card success-card"><div class="kpi-icon">📈</div><div class="kpi-info"><div class="kpi-label">Meta Atingida (dia)</div><div class="kpi-value">${tf}%</div></div></div>`;
 
       setTimeout(()=>{desenharGauge(document.getElementById("chart-gauge"),ind.taxa,meta);document.getElementById("gauge-val").textContent=tf+"%";document.getElementById("meta-val").textContent="▼ Meta estimada: "+mf+"%";},50);
 
-      const sts=dedup(lista),sc={};sts.forEach(s=>{sc[s]=(sc[s]||0)+1;});const sl=Object.keys(sc);
+      const sc={};lista.forEach(o=>{const s=normSt(o.status);if(s!=="CONFORME CRONOGRAMA")sc[s]=(sc[s]||0)+1;});const sl=Object.keys(sc);
       if(cP)cP.destroy();
       cP=new Chart(document.getElementById("chart-pizza").getContext("2d"),{type:"pie",data:{labels:sl,datasets:[{data:sl.map(s=>sc[s]),backgroundColor:sl.map(s=>(STATUS_CONFIG[s]||{cor:"#999"}).cor),borderWidth:1}]},options:{responsive:true,plugins:{legend:{position:"right",labels:{boxWidth:12,font:{size:10}}}}}});
 
@@ -163,10 +195,10 @@
       const cv=document.getElementById("chart-sup");cv.height=Math.max(200,ps.length*30);
       cS=new Chart(cv.getContext("2d"),{type:"bar",data:{labels:ps.map(x=>x.s),datasets:[{label:"Programadas",data:ps.map(x=>x.prog),backgroundColor:"#4DA6FF"},{label:"Concluídas",data:ps.map(x=>x.conc),backgroundColor:"#00B050"},{label:"Em Execução",data:ps.map(x=>x.ex),backgroundColor:"#FF9900"},{label:"Em Atraso",data:ps.map(x=>x.at),backgroundColor:"#C00000"},{label:"Sem Equipe",data:ps.map(x=>x.seq),backgroundColor:"#843C0C"}]},options:{indexAxis:"y",responsive:true,plugins:{legend:{position:"top",labels:{boxWidth:12,font:{size:10}}}},scales:{x:{stacked:false},y:{ticks:{font:{size:10}}}}}});
 
-      document.getElementById("tbody-sup").innerHTML=ps.length?ps.map(x=>{const t=x.prog+x.conc+x.ex+x.at+x.seq;const tx=t>0?((x.conc/t)*100).toFixed(1):0;return`<tr><td><strong>${x.s}</strong></td><td style="color:#4DA6FF;font-weight:600">${x.prog}</td><td style="color:#00B050;font-weight:600">${x.conc}</td><td style="color:#FF9900;font-weight:600">${x.ex}</td><td style="color:#C00000;font-weight:600">${x.at}</td><td style="color:#843C0C;font-weight:600">${x.seq}</td><td><strong>${tx}%</strong></td></tr>`;}).join(""):`<tr><td colspan="7"><div class="empty-state"><p>Nenhum dado</p></div></td></tr>`;
+      document.getElementById("tbody-sup").innerHTML=ps.length?ps.map(x=>{const tx=x.taxa.toFixed(1).replace(".",",");return`<tr><td><strong>${x.s}</strong></td><td style="color:#4DA6FF;font-weight:600">${x.prog}</td><td style="color:#00B050;font-weight:600">${x.conc}</td><td style="color:#FF9900;font-weight:600">${x.ex}</td><td style="color:#C00000;font-weight:600">${x.at}</td><td style="color:#843C0C;font-weight:600">${x.seq}</td><td><strong>${tx}%</strong></td></tr>`;}).join(""):`<tr><td colspan="7"><div class="empty-state"><p>Nenhum dado</p></div></td></tr>`;
     }
 
-    function exportarResumo(){const mes=document.getElementById("f-mes").value,ano=document.getElementById("f-ano").value;const lista=dados.filter(o=>{if(mes&&(o.mes||"").toUpperCase()!==mes)return false;if(ano&&String(o.ano)!==String(ano))return false;return true;});const ps=porSup(lista);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(ps.map(x=>({Supervisor:x.s,Programadas:x.prog,Concluídas:x.conc,EmExecução:x.ex,EmAtraso:x.at,SemEquipe:x.seq}))),"Resumo");XLSX.writeFile(wb,`resumo_${new Date().toISOString().slice(0,10)}.xlsx`);}
+    function exportarResumo(){const mes=document.getElementById("f-mes").value,ano=document.getElementById("f-ano").value;const lista=dados.filter(o=>{if(mes&&(o.mes||"").toUpperCase()!==mes)return false;if(ano&&String(o.ano)!==String(ano))return false;return true;});const ps=porSup(lista);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(ps.map(x=>({Supervisor:x.s,Programadas:x.prog,Concluídas:x.conc,EmExecução:x.ex,EmAtraso:x.at,SemEquipe:x.seq,Taxa:x.taxa.toFixed(2)+"%"}))),"Resumo");XLSX.writeFile(wb,`resumo_${new Date().toISOString().slice(0,10)}.xlsx`);}
 
     init();
   </script>
