@@ -37,19 +37,7 @@
         <div class="charts-grid">
           <div class="chart-card">
             <h3>Taxa de Conclusão vs Meta</h3>
-            <canvas id="chart-gauge" height="160"></canvas>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;padding:0 8px">
-              <span style="font-size:.75rem;color:#718096">0,00%</span>
-              <div style="text-align:center">
-                <div id="gauge-val" style="font-size:1.8rem;font-weight:700;color:#1a2a4a"></div>
-                <div id="meta-val" style="font-size:.8rem;color:#C00000;font-weight:600"></div>
-              </div>
-              <span style="font-size:.75rem;color:#718096">100,00%</span>
-            </div>
-            <div style="display:flex;gap:16px;justify-content:center;margin-top:8px;font-size:.75rem">
-              <span><span style="display:inline-block;width:12px;height:12px;background:#1a2a4a;border-radius:2px;margin-right:4px"></span>Realizado</span>
-              <span><span style="display:inline-block;width:12px;height:3px;background:#C00000;margin-right:4px;vertical-align:middle"></span>Meta do dia</span>
-            </div>
+            <canvas id="chart-gauge" style="width:100%"></canvas>
           </div>
           <div class="chart-card"><h3>Distribuição por Status</h3><canvas id="chart-pizza"></canvas></div>
         </div>
@@ -74,11 +62,11 @@
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <script src="/maneng-bi/js/config.js"></script>
   <script>
-    // ── Lógica IDÊNTICA ao Power BI (DAX replicado) ───────────
-    // Total = COUNTROWS onde STATUS <> "CONFORME CRONOGRAMA" (sem dedup)
-    // Feitos = CONCLUIDA + EM EXECUÇÃO + VALIDADA
-    // Denom  = CONCLUIDA + EM EXECUÇÃO + PROGRAMADO + EM ATRASO + SEM EQUIPE + VALIDADA
-    // Taxa   = Feitos / Denom
+    // ── Lógica idêntica ao DAX do Power BI ───────────────────
+    // Total    = COUNTROWS onde STATUS <> "CONFORME CRONOGRAMA"
+    // Feitos   = STATUS IN {CONCLUIDA, EM EXECUÇÃO, VALIDADA}
+    // Denom    = STATUS IN {CONCLUIDA, EM EXECUÇÃO, PROGRAMADO, EM ATRASO, SEM EQUIPE, VALIDADA}
+    // Taxa     = Feitos / Denom
 
     const FERIADOS = new Set(["2026-01-01","2026-02-16","2026-02-17","2026-04-03","2026-04-21","2026-05-01","2026-06-04","2026-09-07","2026-10-12","2026-11-02","2026-11-15","2026-11-20","2026-12-25","2027-01-01","2027-02-15","2027-02-16","2027-04-02","2027-04-21","2027-05-01","2027-05-27","2027-09-07","2027-10-12","2027-11-02","2027-11-15","2027-11-20","2027-12-25"]);
 
@@ -86,55 +74,61 @@
     function isDiaUtil(a,mi,d){const dow=new Date(a,mi,d).getDay();if(dow===0||dow===6)return false;return!FERIADOS.has(`${a}-${String(mi+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`);}
     function diasUteis(a,mi,ate){const f=ate||new Date(a,mi+1,0).getDate();let c=0;for(let d=1;d<=f;d++)if(isDiaUtil(a,mi,d))c++;return c;}
     function calcMeta(mes,ano){const mi=MESES.indexOf(mes);if(mi<0)return{meta:100,tu:0,hu:0};const a=parseInt(ano),h=new Date(),tu=diasUteis(a,mi);let hu;if(h.getFullYear()===a&&h.getMonth()===mi)hu=diasUteis(a,mi,h.getDate());else if(new Date(a,mi+1,1)<=h)hu=tu;else hu=0;return{meta:tu>0?(hu/tu)*100:0,tu,hu};}
-
-    function calcInd(lista) {
-      // DAX: COUNTROWS sem deduplicação por unidade
-      const STS_FEITOS = ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA","EM EXECUÇÃO","EM EXECUCAO"];
-      const STS_DENOM  = ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA","EM EXECUÇÃO","EM EXECUCAO","PROGRAMADO","PROGRAMADA","EM ATRASO","SEM EQUIPE"];
-
-      const sts = lista.map(o => normSt(o.status));
-
-      // Total = todas as linhas EXCETO CONFORME CRONOGRAMA
-      const total  = sts.filter(s => s !== "CONFORME CRONOGRAMA").length;
-      const prog   = sts.filter(s => ["PROGRAMADO","PROGRAMADA"].includes(s)).length;
-      const conc   = sts.filter(s => ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA"].includes(s)).length;
-      const ex     = sts.filter(s => ["EM EXECUÇÃO","EM EXECUCAO"].includes(s)).length;
-      const at     = sts.filter(s => s === "EM ATRASO").length;
-      const seq    = sts.filter(s => s === "SEM EQUIPE").length;
-      const feitos = sts.filter(s => STS_FEITOS.includes(s)).length;
-      const denom  = sts.filter(s => STS_DENOM.includes(s)).length;
-      const taxa   = denom > 0 ? (feitos / denom) * 100 : 0;
-
-      return {total, prog, conc, ex, at, seq, taxa};
-    }
-
-    function porSup(lista) {
-      const STS_FEITOS = ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA","EM EXECUÇÃO","EM EXECUCAO"];
-      const STS_DENOM  = ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA","EM EXECUÇÃO","EM EXECUCAO","PROGRAMADO","PROGRAMADA","EM ATRASO","SEM EQUIPE"];
-      const grupos = {};
-      lista.forEach(o => {
-        const s = o.supervisao || "Sem Supervisor";
-        if(!grupos[s]) grupos[s] = [];
-        grupos[s].push(normSt(o.status));
-      });
-      return Object.entries(grupos).map(([s, sts]) => {
-        const feitos = sts.filter(x => STS_FEITOS.includes(x)).length;
-        const denom  = sts.filter(x => STS_DENOM.includes(x)).length;
-        return {
-          s,
-          prog: sts.filter(x => ["PROGRAMADO","PROGRAMADA"].includes(x)).length,
-          conc: sts.filter(x => ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA"].includes(x)).length,
-          ex:   sts.filter(x => ["EM EXECUÇÃO","EM EXECUCAO"].includes(x)).length,
-          at:   sts.filter(x => x === "EM ATRASO").length,
-          seq:  sts.filter(x => x === "SEM EQUIPE").length,
-          taxa: denom > 0 ? (feitos / denom) * 100 : 0
-        };
-      }).sort((a,b) => b.conc - a.conc);
-    }
-
     function popSel(id,lista,campo,ph){const sel=document.getElementById(id);if(!sel)return;const v=[...new Set(lista.map(i=>i[campo]).filter(Boolean))].sort();sel.innerHTML=`<option value="">${ph}</option>`+v.map(x=>`<option value="${x}">${x}</option>`).join("");}
 
-    function desenharGauge(cv,taxa,meta){cv.width=cv.offsetWidth||400;cv.height=180;const ctx=cv.getContext("2d"),W=cv.width,H=cv.height,cx=W/2,cy=H*.95,r=Math.min(W*.42,H*.82);ctx.clearRect(0,0,W,H);ctx.beginPath();ctx.arc(cx,cy,r,Math.PI,0);ctx.strokeStyle="#e2e8f0";ctx.lineWidth=26;ctx.stroke();if(taxa>0){const ang=Math.PI+(taxa/100)*Math.PI;ctx.beginPath();ctx.arc(cx,cy,r,Math.PI,ang);ctx.strokeStyle="#1a2a4a";ctx.lineWidth=26;ctx.lineCap="butt";ctx.stroke();}if(meta>0&&meta<=100){const am=Math.PI+(meta/100)*Math.PI;ctx.beginPath();ctx.moveTo(cx+(r-22)*Math.cos(am),cy+(r-22)*Math.sin(am));ctx.lineTo(cx+(r+22)*Math.cos(am),cy+(r+22)*Math.sin(am));ctx.strokeStyle="#C00000";ctx.lineWidth=3;ctx.lineCap="round";ctx.stroke();}}
+    const STS_FEITOS = ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA","EM EXECUÇÃO","EM EXECUCAO"];
+    const STS_DENOM  = ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA","EM EXECUÇÃO","EM EXECUCAO","PROGRAMADO","PROGRAMADA","EM ATRASO","SEM EQUIPE"];
+
+    function calcInd(lista){
+      const sts=lista.map(o=>normSt(o.status));
+      const total =sts.filter(s=>s!=="CONFORME CRONOGRAMA").length;
+      const prog  =sts.filter(s=>["PROGRAMADO","PROGRAMADA"].includes(s)).length;
+      const conc  =sts.filter(s=>["CONCLUIDA","VALIDADA","AUDITADA","FATURADA"].includes(s)).length;
+      const ex    =sts.filter(s=>["EM EXECUÇÃO","EM EXECUCAO"].includes(s)).length;
+      const at    =sts.filter(s=>s==="EM ATRASO").length;
+      const seq   =sts.filter(s=>s==="SEM EQUIPE").length;
+      const feitos=sts.filter(s=>STS_FEITOS.includes(s)).length;
+      const denom =sts.filter(s=>STS_DENOM.includes(s)).length;
+      return{total,prog,conc,ex,at,seq,taxa:denom>0?(feitos/denom)*100:0};
+    }
+
+    function porSup(lista){
+      const g={};
+      lista.forEach(o=>{const s=o.supervisao||"Sem Supervisor";if(!g[s])g[s]=[];g[s].push(normSt(o.status));});
+      return Object.entries(g).map(([s,sts])=>{
+        const feitos=sts.filter(x=>STS_FEITOS.includes(x)).length;
+        const denom =sts.filter(x=>STS_DENOM.includes(x)).length;
+        return{s,prog:sts.filter(x=>["PROGRAMADO","PROGRAMADA"].includes(x)).length,conc:sts.filter(x=>["CONCLUIDA","VALIDADA","AUDITADA","FATURADA"].includes(x)).length,ex:sts.filter(x=>["EM EXECUÇÃO","EM EXECUCAO"].includes(x)).length,at:sts.filter(x=>x==="EM ATRASO").length,seq:sts.filter(x=>x==="SEM EQUIPE").length,taxa:denom>0?(feitos/denom)*100:0};
+      }).sort((a,b)=>b.conc-a.conc);
+    }
+
+    function desenharGauge(cv,taxa,meta){
+      cv.width=cv.offsetWidth||480; cv.height=220;
+      const ctx=cv.getContext("2d"),W=cv.width,H=cv.height,cx=W/2,cy=H*.78,r=Math.min(W*.38,cy*.88);
+      ctx.clearRect(0,0,W,H);
+      // Fundo
+      ctx.beginPath();ctx.arc(cx,cy,r,Math.PI,0);ctx.strokeStyle="#e2e8f0";ctx.lineWidth=28;ctx.lineCap="butt";ctx.stroke();
+      // Realizado
+      if(taxa>0){const ang=Math.PI+(taxa/100)*Math.PI;ctx.beginPath();ctx.arc(cx,cy,r,Math.PI,ang);ctx.strokeStyle="#1a2a4a";ctx.lineWidth=28;ctx.lineCap="butt";ctx.stroke();}
+      // Linha meta
+      if(meta>0&&meta<=100){const am=Math.PI+(meta/100)*Math.PI;ctx.beginPath();ctx.moveTo(cx+(r-26)*Math.cos(am),cy+(r-26)*Math.sin(am));ctx.lineTo(cx+(r+26)*Math.cos(am),cy+(r+26)*Math.sin(am));ctx.strokeStyle="#C00000";ctx.lineWidth=3;ctx.lineCap="round";ctx.stroke();}
+      // Rótulos extremos
+      ctx.font="12px 'Segoe UI',Arial,sans-serif";ctx.fillStyle="#718096";
+      ctx.textAlign="center";ctx.fillText("0,00%",cx-r,cy+20);
+      ctx.fillText("100,00%",cx+r,cy+20);
+      // Valor
+      ctx.font="bold 40px 'Segoe UI',Arial,sans-serif";ctx.fillStyle="#1a2a4a";ctx.textAlign="center";
+      ctx.fillText(taxa.toFixed(2).replace(".",",")+"%",cx,cy+6);
+      // Meta texto
+      ctx.font="13px 'Segoe UI',Arial,sans-serif";ctx.fillStyle="#C00000";
+      ctx.fillText("▼ Meta estimada: "+meta.toFixed(2).replace(".",",")+"%",cx,cy+28);
+      // Legenda
+      ctx.fillStyle="#1a2a4a";ctx.fillRect(cx-90,cy+50,12,12);
+      ctx.font="11px 'Segoe UI',Arial,sans-serif";ctx.fillStyle="#4a5568";ctx.textAlign="left";
+      ctx.fillText("Realizado",cx-74,cy+61);
+      ctx.strokeStyle="#C00000";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(cx+10,cy+56);ctx.lineTo(cx+28,cy+56);ctx.stroke();
+      ctx.fillStyle="#4a5568";ctx.fillText("Meta do dia",cx+32,cy+61);
+    }
 
     let dados=[], cP, cS;
 
@@ -184,7 +178,7 @@
         <div class="kpi-card warning-card"><div class="kpi-icon">🎯</div><div class="kpi-info"><div class="kpi-label">Meta Estimada (dia)</div><div class="kpi-value">${mf}%</div></div></div>
         <div class="kpi-card success-card"><div class="kpi-icon">📈</div><div class="kpi-info"><div class="kpi-label">Meta Atingida (dia)</div><div class="kpi-value">${tf}%</div></div></div>`;
 
-      setTimeout(()=>{desenharGauge(document.getElementById("chart-gauge"),ind.taxa,meta);document.getElementById("gauge-val").textContent=tf+"%";document.getElementById("meta-val").textContent="▼ Meta estimada: "+mf+"%";},50);
+      setTimeout(()=>{desenharGauge(document.getElementById("chart-gauge"),ind.taxa,meta);},50);
 
       const sc={};lista.forEach(o=>{const s=normSt(o.status);if(s!=="CONFORME CRONOGRAMA")sc[s]=(sc[s]||0)+1;});const sl=Object.keys(sc);
       if(cP)cP.destroy();
