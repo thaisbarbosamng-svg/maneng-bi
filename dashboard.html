@@ -7,7 +7,18 @@
   <link rel="stylesheet" href="/maneng-bi/css/main.css">
 </head>
 <body>
-  <aside class="sidebar"><div class="sidebar-logo"><span>man<span class="accent">eng</span></span></div><div id="sidebar"></div></aside>
+  <aside class="sidebar">
+    <div class="sidebar-logo"><span>man<span class="accent">eng</span></span></div>
+    <nav class="sidebar-nav">
+      <a href="/maneng-bi/dashboard.html" class="active"><span class="nav-icon">📊</span> Dashboard</a>
+      <a href="/maneng-bi/cronograma.html"><span class="nav-icon">📅</span> Cronograma</a>
+      <a href="/maneng-bi/os.html"><span class="nav-icon">🔧</span> Ordens de Serviço</a>
+      <a href="/maneng-bi/clientes.html"><span class="nav-icon">🏪</span> Clientes</a>
+      <a href="/maneng-bi/equipes.html"><span class="nav-icon">👥</span> Equipes</a>
+      <a href="/maneng-bi/alertas.html" style="color:#FF9900"><span class="nav-icon">⚠️</span> Alertas</a>
+      <a href="/maneng-bi/auditoria.html"><span class="nav-icon">🔍</span> Auditoria</a>
+    </nav>
+  </aside>
   <div class="main">
     <div class="topbar">
       <div class="topbar-title">Dashboard Manutenção</div>
@@ -59,78 +70,46 @@
     </div>
   </div>
 
-  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth-compat.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <script src="/maneng-bi/js/config.js"></script>
   <script>
-    // ── Firebase Auth inline ──────────────────────────────────
-    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
-    const fbAuth = firebase.auth();
-
-    // ── Constantes de cálculo ─────────────────────────────────
-    const EXCECOES  = ["DISTRATO DE CONTRATO","DISTRATO","LOJA FECHADA","LOJA EM REFORMA","NÃO POSSUI GALERIA NESTA LOJA","RESIDENTE","CANCELADO","CONFORME CRONOGRAMA"];
-    const STS_CONC  = ["CONCLUIDA","VALIDADA","AUDITADA","FATURADA"];
-    const PRIO      = ["FATURADA","AUDITADA","VALIDADA","CONCLUIDA","EM EXECUÇÃO","EM ATRASO","SEM EQUIPE","PROGRAMADO","PROGRAMADA","CONFORME CRONOGRAMA","DISTRATO DE CONTRATO","DISTRATO","LOJA FECHADA","LOJA EM REFORMA","NÃO POSSUI GALERIA NESTA LOJA","RESIDENTE","CANCELADO"];
-
-    // Feriados Brasil 2025-2027
-    const FERIADOS = new Set(["2025-01-01","2025-03-03","2025-03-04","2025-04-18","2025-04-21","2025-05-01","2025-06-19","2025-09-07","2025-10-12","2025-11-02","2025-11-15","2025-11-20","2025-12-25","2026-01-01","2026-02-16","2026-02-17","2026-04-03","2026-04-21","2026-05-01","2026-06-04","2026-09-07","2026-10-12","2026-11-02","2026-11-15","2026-11-20","2026-12-25","2027-01-01","2027-02-15","2027-02-16","2027-04-02","2027-04-21","2027-05-01","2027-05-27","2027-09-07","2027-10-12","2027-11-02","2027-11-15","2027-11-20","2027-12-25"]);
+    const EXCECOES=["DISTRATO DE CONTRATO","DISTRATO","LOJA FECHADA","LOJA EM REFORMA","NÃO POSSUI GALERIA NESTA LOJA","RESIDENTE","CANCELADO","CONFORME CRONOGRAMA"];
+    const STS_CONC=["CONCLUIDA","VALIDADA","AUDITADA","FATURADA"];
+    const PRIO=["FATURADA","AUDITADA","VALIDADA","CONCLUIDA","EM EXECUÇÃO","EM ATRASO","SEM EQUIPE","PROGRAMADO","PROGRAMADA","CONFORME CRONOGRAMA","DISTRATO DE CONTRATO","DISTRATO","LOJA FECHADA","LOJA EM REFORMA","NÃO POSSUI GALERIA NESTA LOJA","RESIDENTE","CANCELADO"];
+    const FERIADOS=new Set(["2026-01-01","2026-02-16","2026-02-17","2026-04-03","2026-04-21","2026-05-01","2026-06-04","2026-09-07","2026-10-12","2026-11-02","2026-11-15","2026-11-20","2026-12-25","2027-01-01","2027-02-15","2027-02-16","2027-04-02","2027-04-21","2027-05-01","2027-05-27","2027-09-07","2027-10-12","2027-11-02","2027-11-15","2027-11-20","2027-12-25"]);
 
     function normSt(s){if(!s)return"PROGRAMADO";const m={"PROGRAMADA":"PROGRAMADO","CONCLUIDO":"CONCLUIDA","VALIDADO":"VALIDADA","AUDITADO":"AUDITADA","FATURADO":"FATURADA"};const u=s.toString().trim().toUpperCase();return m[u]||u;}
-
     function isDiaUtil(a,m,d){const dow=new Date(a,m,d).getDay();if(dow===0||dow===6)return false;return!FERIADOS.has(`${a}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`);}
     function diasUteis(a,mi,ate){const f=ate||new Date(a,mi+1,0).getDate();let c=0;for(let d=1;d<=f;d++)if(isDiaUtil(a,mi,d))c++;return c;}
     function calcMeta(mes,anoStr){const mi=MESES.indexOf(mes);if(mi<0)return{meta:100,totalUteis:0,hojeUteis:0};const a=parseInt(anoStr),h=new Date(),tu=diasUteis(a,mi);let hu;if(h.getFullYear()===a&&h.getMonth()===mi)hu=diasUteis(a,mi,h.getDate());else if(new Date(a,mi+1,1)<=h)hu=tu;else hu=0;return{meta:tu>0?(hu/tu)*100:0,totalUteis:tu,hojeUteis:hu};}
-
     function dedup(lista){const p={};lista.forEach(o=>{const k=`${o.sigla}|${o.cliente}`,st=normSt(o.status);if(!p[k]){p[k]=st;return;}const ai=PRIO.indexOf(p[k]),bi=PRIO.indexOf(st);if(bi<ai)p[k]=st;});return Object.values(p);}
-
-    function calcInd(lista){const base=dedup(lista).filter(s=>!EXCECOES.includes(s));const tot=base.length;const conc=base.filter(s=>STS_CONC.includes(s)).length;const ex=base.filter(s=>["EM EXECUÇÃO","EM EXECUCAO"].includes(s)).length;const real=conc+ex;const at=base.filter(s=>s==="EM ATRASO").length;const prog=base.filter(s=>["PROGRAMADO","PROGRAMADA"].includes(s)).length;const seq=base.filter(s=>s==="SEM EQUIPE").length;return{tot,conc,ex,real,at,prog,seq,taxa:tot>0?(real/tot)*100:0};}
-
+    function calcInd(lista){const base=dedup(lista).filter(s=>!EXCECOES.includes(s));const tot=base.length;const conc=base.filter(s=>STS_CONC.includes(s)).length;const ex=base.filter(s=>["EM EXECUÇÃO","EM EXECUCAO"].includes(s)).length;const at=base.filter(s=>s==="EM ATRASO").length;const prog=base.filter(s=>["PROGRAMADO","PROGRAMADA"].includes(s)).length;const seq=base.filter(s=>s==="SEM EQUIPE").length;return{tot,conc,ex,real:conc+ex,at,prog,seq,taxa:tot>0?((conc+ex)/tot)*100:0};}
     function porSup(lista){const p={};lista.forEach(o=>{const s=o.supervisao||"Sem Supervisor",k=`${o.sigla}|${o.cliente}`;if(!p[s])p[s]={s,u:{}};const st=normSt(o.status);if(!p[s].u[k]){p[s].u[k]=st;return;}const ai=PRIO.indexOf(p[s].u[k]),bi=PRIO.indexOf(st);if(bi<ai)p[s].u[k]=st;});return Object.values(p).map(x=>{const base=Object.values(x.u).filter(v=>!EXCECOES.includes(v));return{s:x.s,conc:base.filter(v=>STS_CONC.includes(v)).length,ex:base.filter(v=>["EM EXECUÇÃO","EM EXECUCAO"].includes(v)).length,prog:base.filter(v=>["PROGRAMADO","PROGRAMADA"].includes(v)).length,at:base.filter(v=>v==="EM ATRASO").length,seq:base.filter(v=>v==="SEM EQUIPE").length};}).sort((a,b)=>b.conc-a.conc);}
-
     function popSel(id,lista,campo,ph){const sel=document.getElementById(id);if(!sel)return;const v=[...new Set(lista.map(i=>i[campo]).filter(Boolean))].sort();sel.innerHTML=`<option value="">${ph}</option>`+v.map(x=>`<option value="${x}">${x}</option>`).join("");}
-
     function desenharGauge(cv,taxa,meta){cv.width=cv.offsetWidth||400;cv.height=180;const ctx=cv.getContext("2d"),W=cv.width,H=cv.height,cx=W/2,cy=H*.95,r=Math.min(W*.42,H*.82);ctx.clearRect(0,0,W,H);ctx.beginPath();ctx.arc(cx,cy,r,Math.PI,0);ctx.strokeStyle="#e2e8f0";ctx.lineWidth=26;ctx.stroke();if(taxa>0){const ang=Math.PI+(taxa/100)*Math.PI;ctx.beginPath();ctx.arc(cx,cy,r,Math.PI,ang);ctx.strokeStyle="#1a2a4a";ctx.lineWidth=26;ctx.lineCap="butt";ctx.stroke();}if(meta>0&&meta<=100){const am=Math.PI+(meta/100)*Math.PI;ctx.beginPath();ctx.moveTo(cx+(r-22)*Math.cos(am),cy+(r-22)*Math.sin(am));ctx.lineTo(cx+(r+22)*Math.cos(am),cy+(r+22)*Math.sin(am));ctx.strokeStyle="#C00000";ctx.lineWidth=3;ctx.lineCap="round";ctx.stroke();}}
 
     let dados=[], cP, cS;
 
-    fbAuth.onAuthStateChanged(async user=>{
-      if(!user){window.location.href="/maneng-bi/login.html";return;}
-      const nome=user.displayName||user.email.split("@")[0];
-      document.getElementById("sidebar").innerHTML=`
-        <div class="sidebar-user"><div class="user-avatar">${nome.charAt(0).toUpperCase()}</div>
-          <div><div class="user-name">${nome}</div><div class="user-role">Administrador</div></div></div>
-        <nav class="sidebar-nav">
-          <a href="/maneng-bi/dashboard.html" class="active"><span class="nav-icon">📊</span> Dashboard</a>
-          <a href="/maneng-bi/cronograma.html"><span class="nav-icon">📅</span> Cronograma</a>
-          <a href="/maneng-bi/os.html"><span class="nav-icon">🔧</span> Ordens de Serviço</a>
-          <a href="/maneng-bi/clientes.html"><span class="nav-icon">🏪</span> Clientes</a>
-          <a href="/maneng-bi/equipes.html"><span class="nav-icon">👥</span> Equipes</a>
-          <a href="/maneng-bi/alertas.html" style="color:#FF9900"><span class="nav-icon">⚠️</span> Alertas</a>
-          <a href="/maneng-bi/auditoria.html"><span class="nav-icon">🔍</span> Auditoria</a>
-        </nav>
-        <div class="sidebar-footer"><button onclick="fbAuth.signOut().then(()=>location.href='/maneng-bi/login.html')" class="btn-logout">Sair</button></div>`;
-
+    async function init(){
       const am=new Date().getFullYear(),mm=MESES[new Date().getMonth()];
       document.getElementById("f-mes").innerHTML=`<option value="">Todos os meses</option>`+MESES.map(m=>`<option value="${m}"${m===mm?" selected":""}>${m}</option>`).join("");
       let ao=`<option value="">Todos os anos</option>`;for(let a=am-1;a<=am+1;a++)ao+=`<option value="${a}"${a===am?" selected":""}>${a}</option>`;
       document.getElementById("f-ano").innerHTML=ao;
-
       try{
         const resp=await fetch("/maneng-bi/data/ordens_servico.json?t="+Date.now());
-        if(!resp.ok)throw new Error("Arquivo não encontrado. Execute a sincronização no GitHub Actions.");
+        if(!resp.ok)throw new Error("Execute a sincronização no GitHub Actions primeiro.");
         const json=await resp.json();
         dados=json.registros||[];
-        popSel("f-supervisor", dados,"supervisao", "Todos supervisores");
+        popSel("f-supervisor",dados,"supervisao","Todos supervisores");
         popSel("f-coordenador",dados,"coordenador","Todos coordenadores");
-        popSel("f-estado",     dados,"estado",     "Todos os estados");
+        popSel("f-estado",dados,"estado","Todos os estados");
         document.getElementById("loading").style.display="none";
         document.getElementById("dash").style.display="block";
         renderD();
         ["f-mes","f-ano","f-supervisor","f-coordenador","f-estado"].forEach(id=>document.getElementById(id).addEventListener("change",renderD));
-      }catch(e){document.getElementById("loading").innerHTML=`<span style="color:#C00000">${e.message}</span>`;}
-    });
+      }catch(e){document.getElementById("loading").innerHTML=`<span style="color:#C00000">Erro: ${e.message}</span>`;}
+    }
 
     function renderD(){
       const mes=document.getElementById("f-mes").value,ano=document.getElementById("f-ano").value,
@@ -147,7 +126,6 @@
       const ind=calcInd(lista);
       const{meta,totalUteis,hojeUteis}=(mes&&ano)?calcMeta(mes,ano):{meta:100,totalUteis:0,hojeUteis:0};
       const tf=ind.taxa.toFixed(2).replace(".",","),mf=meta.toFixed(2).replace(".",",");
-
       document.getElementById("kpi-grid").innerHTML=`
         <div class="kpi-card"><div class="kpi-icon">📋</div><div class="kpi-info"><div class="kpi-label">OS Programada</div><div class="kpi-value">${ind.prog}</div></div></div>
         <div class="kpi-card success-card"><div class="kpi-icon">✅</div><div class="kpi-info"><div class="kpi-label">OS Concluída</div><div class="kpi-value">${ind.conc}</div></div></div>
@@ -157,22 +135,20 @@
         <div class="kpi-card accent-card"><div class="kpi-icon">🚨</div><div class="kpi-info"><div class="kpi-label">Total</div><div class="kpi-value large">${ind.tot}</div></div></div>
         <div class="kpi-card warning-card"><div class="kpi-icon">🎯</div><div class="kpi-info"><div class="kpi-label">Meta Estimada (dia)</div><div class="kpi-value">${mf}%</div></div></div>
         <div class="kpi-card success-card"><div class="kpi-icon">📈</div><div class="kpi-info"><div class="kpi-label">Meta Atingida (dia)</div><div class="kpi-value">${tf}%</div></div></div>`;
-
       setTimeout(()=>{desenharGauge(document.getElementById("chart-gauge"),ind.taxa,meta);document.getElementById("gauge-val").textContent=tf+"%";document.getElementById("meta-val").textContent="▼ Meta estimada: "+mf+"%";},50);
-
       const sts=dedup(lista),sc={};sts.filter(s=>!EXCECOES.includes(s)).forEach(s=>{sc[s]=(sc[s]||0)+1;});const sl=Object.keys(sc);
       if(cP)cP.destroy();
       cP=new Chart(document.getElementById("chart-pizza").getContext("2d"),{type:"pie",data:{labels:sl,datasets:[{data:sl.map(s=>sc[s]),backgroundColor:sl.map(s=>(STATUS_CONFIG[s]||{cor:"#999"}).cor),borderWidth:1}]},options:{responsive:true,plugins:{legend:{position:"right",labels:{boxWidth:12,font:{size:10}}}}}});
-
       const ps=porSup(lista);
       if(cS)cS.destroy();
       const cv=document.getElementById("chart-sup");cv.height=Math.max(200,ps.length*30);
       cS=new Chart(cv.getContext("2d"),{type:"bar",data:{labels:ps.map(x=>x.s),datasets:[{label:"Programadas",data:ps.map(x=>x.prog),backgroundColor:"#4DA6FF"},{label:"Concluídas",data:ps.map(x=>x.conc),backgroundColor:"#00B050"},{label:"Em Execução",data:ps.map(x=>x.ex),backgroundColor:"#FF9900"},{label:"Em Atraso",data:ps.map(x=>x.at),backgroundColor:"#C00000"},{label:"Sem Equipe",data:ps.map(x=>x.seq),backgroundColor:"#843C0C"}]},options:{indexAxis:"y",responsive:true,plugins:{legend:{position:"top",labels:{boxWidth:12,font:{size:10}}}},scales:{x:{stacked:false},y:{ticks:{font:{size:10}}}}}});
-
       document.getElementById("tbody-sup").innerHTML=ps.length?ps.map(x=>{const t=x.prog+x.conc+x.ex+x.at+x.seq;const tx=t>0?((x.conc/t)*100).toFixed(1):0;return`<tr><td><strong>${x.s}</strong></td><td style="color:#4DA6FF;font-weight:600">${x.prog}</td><td style="color:#00B050;font-weight:600">${x.conc}</td><td style="color:#FF9900;font-weight:600">${x.ex}</td><td style="color:#C00000;font-weight:600">${x.at}</td><td style="color:#843C0C;font-weight:600">${x.seq}</td><td><strong>${tx}%</strong></td></tr>`;}).join(""):`<tr><td colspan="7"><div class="empty-state"><p>Nenhum dado</p></div></td></tr>`;
     }
 
-    function exportarResumo(){const mes=document.getElementById("f-mes").value,ano=document.getElementById("f-ano").value;const lista=dados.filter(o=>{if(mes&&(o.mes||"").toUpperCase()!==mes)return false;if(ano&&String(o.ano)!==String(ano))return false;return true;});const ps=porSup(lista);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(ps.map(x=>({Supervisor:x.s,Programadas:x.prog,Concluídas:x.conc,EmExecução:x.ex,EmAtraso:x.at,SemEquipe:x.seq}))),"Resumo");XLSX.writeFile(wb,`resumo_supervisores_${new Date().toISOString().slice(0,10)}.xlsx`);}
+    function exportarResumo(){const mes=document.getElementById("f-mes").value,ano=document.getElementById("f-ano").value;const lista=dados.filter(o=>{if(mes&&(o.mes||"").toUpperCase()!==mes)return false;if(ano&&String(o.ano)!==String(ano))return false;return true;});const ps=porSup(lista);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(ps.map(x=>({Supervisor:x.s,Programadas:x.prog,Concluídas:x.conc,EmExecução:x.ex,EmAtraso:x.at,SemEquipe:x.seq}))),"Resumo");XLSX.writeFile(wb,`resumo_${new Date().toISOString().slice(0,10)}.xlsx`);}
+
+    init();
   </script>
 </body>
 </html>
